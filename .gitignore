@@ -1,0 +1,7 @@
+node_modules/
+dist/
+build/
+config/runtime.local.json
+config/metadata.local.json
+.DS_Store
+*.log

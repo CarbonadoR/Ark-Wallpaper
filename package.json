@@ -1,0 +1,27 @@
+{
+  "name": "arknights-dynchars-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"node --watch server/index.mjs\" \"vite\"",
+    "build": "vite build",
+    "start": "node server/index.mjs",
+    "test": "node --test",
+    "audit": "node scripts/audit-resources.mjs",
+    "macos:build": "npm run build && node scripts/build-macos-app.mjs",
+    "macos:run": "npm run macos:build && open -n \"build/macos/Arknights Dynamic Wallpaper.app\""
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pixi-spine": "^3.1.2",
+    "pixi.js": "^6.5.10",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.2",
+    "concurrently": "^9.2.1",
+    "vite": "^7.1.5"
+  }
+}

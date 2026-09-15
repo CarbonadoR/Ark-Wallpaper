@@ -1,0 +1,6 @@
+{
+  "host": "127.0.0.1",
+  "port": 8791,
+  "resourceRoot": "../arknights-dynchars",
+  "metadataFile": "./metadata.local.json"
+}
