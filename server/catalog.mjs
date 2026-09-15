@@ -13,10 +13,18 @@ function walk(directory) {
 
 function atlasPages(atlasPath) {
   const directory = path.dirname(atlasPath);
+  const atlasStem = path.basename(atlasPath, ".atlas");
   return fs.readFileSync(atlasPath, "utf8")
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => TEXTURE_PATTERN.test(line) && fs.existsSync(path.join(directory, line)));
+    .filter((line) => TEXTURE_PATTERN.test(line))
+    .map((atlasName) => {
+      const extension = path.extname(atlasName);
+      const numberedSibling = /\$\d+$/.test(atlasStem) ? `${atlasStem}${extension}` : null;
+      const sourceName = numberedSibling && fs.existsSync(path.join(directory, numberedSibling)) ? numberedSibling : atlasName;
+      return { atlasName, sourceName };
+    })
+    .filter(({ sourceName }) => fs.existsSync(path.join(directory, sourceName)));
 }
 
 function skeletonForAtlas(atlasPath, directoryFiles) {
@@ -77,8 +85,8 @@ export function scanResources(resourceRoot, metadataFile) {
     const groupId = parts[0];
     const kind = parts[1] || "Unknown";
     const skeletonPath = skeletonForAtlas(atlasPath, directoryMap.get(directory) || []);
-    const pages = atlasPages(atlasPath);
-    if (!skeletonPath || !pages.length) {
+    const pageMappings = atlasPages(atlasPath);
+    if (!skeletonPath || !pageMappings.length) {
       issues.push({ atlas: relativeAtlas, problem: !skeletonPath ? "missing-skeleton" : "missing-texture" });
       continue;
     }
@@ -93,7 +101,8 @@ export function scanResources(resourceRoot, metadataFile) {
       skeletonPath,
       skeletonFormat: skeletonPath.endsWith(".skel") ? "binary" : "json",
       spineVersion: readSpineVersion(skeletonPath),
-      pages,
+      pages: pageMappings.map(({ sourceName }) => sourceName),
+      pageNames: pageMappings.map(({ atlasName }) => atlasName),
     });
   }
   const byGroup = new Map();
@@ -133,6 +142,6 @@ export function publicCatalog(index) {
 }
 
 export function virtualAtlas(model) {
-  const aliases = new Map(model.pages.map((page, index) => [page, `texture-${index}${path.extname(page).toLowerCase()}`]));
+  const aliases = new Map((model.pageNames || model.pages).map((page, index) => [page, `texture-${index}${path.extname(model.pages[index]).toLowerCase()}`]));
   return fs.readFileSync(model.atlasPath, "utf8").split(/(\r?\n)/).map((part) => aliases.get(part.trim()) || part).join("");
 }

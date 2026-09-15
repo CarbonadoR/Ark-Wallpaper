@@ -29,3 +29,19 @@ test("virtual atlas aliases fragment-sensitive and multi-page texture names", ()
   assert.doesNotMatch(output, /character#/);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("scanner repairs numbered extraction atlas texture references", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-numbered-atlas-"));
+  const directory = path.join(root, "char_test_2", "DynIllust", "dyn_test");
+  fs.mkdirSync(directory, { recursive: true });
+  const atlasPath = path.join(directory, "model$0.atlas");
+  fs.writeFileSync(atlasPath, "\nmodel.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n");
+  fs.writeFileSync(path.join(directory, "model.png"), "base");
+  fs.writeFileSync(path.join(directory, "model$0.png"), "background");
+  fs.writeFileSync(path.join(directory, "model$0.skel"), Buffer.from([0, 4, 51, 46, 56]));
+  const result = scanResources(root);
+  assert.deepEqual(result.models[0].pages, ["model$0.png"]);
+  assert.deepEqual(result.models[0].pageNames, ["model.png"]);
+  assert.match(virtualAtlas(result.models[0]), /^texture-0\.png/m);
+  fs.rmSync(root, { recursive: true, force: true });
+});

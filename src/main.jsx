@@ -27,6 +27,17 @@ function preferredModel(group) {
   return group?.models.find((model) => model.kind === "DynIllust") || group?.models[0] || null;
 }
 
+function idleAnimation(names) {
+  return names.find((name) => /(^|[_-])(idle|loop)([_-]|$)/i.test(name)) || names[0] || null;
+}
+
+function interactionAnimation(names) {
+  return names.find((name) => /^interact$/i.test(name))
+    || names.find((name) => /(^|[_-])(interact|touch|tap|click)([_-]|$)/i.test(name))
+    || names.find((name) => /(^|[_-])special([_-]|$)/i.test(name))
+    || null;
+}
+
 function loadSpine(model) {
   return new Promise((resolve, reject) => {
     const loader = new PIXI.Loader();
@@ -35,7 +46,9 @@ function loadSpine(model) {
     loader.add(key, model.skeletonUrl, {
       metadata: {
         spineAtlasFile: model.atlasUrl,
-        imageMetadata: { alphaMode: PIXI.ALPHA_MODES.PMA },
+        // These PNG atlases contain straight alpha. Premultiply them while
+        // uploading so linear filtering does not expose pale RGB edge pixels.
+        imageMetadata: { alphaMode: PIXI.ALPHA_MODES.UNPACK },
       },
     });
     loader.load((_instance, resources) => {
@@ -48,7 +61,8 @@ function loadSpine(model) {
 
 function Stage({ model, resetSignal, onReady, onError }) {
   const hostRef = useRef(null);
-  const stateRef = useRef({ app: null, display: null, spine: null, loader: null, layout: initialLayout, baseScaleX: 1, baseScaleY: 1, scale: 1 });
+  const stateRef = useRef({ app: null, display: null, spine: null, loader: null, model: null, animations: [], idle: null, interaction: null, layout: initialLayout, baseScaleX: 1, baseScaleY: 1, scale: 1, onReady });
+  stateRef.current.onReady = onReady;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -81,15 +95,18 @@ function Stage({ model, resetSignal, onReady, onError }) {
     canvas.addEventListener("pointerdown", (event) => {
       const state = stateRef.current;
       if (!state.display) return;
-      gesture = { pointerId: event.pointerId, previousX: event.clientX, previousY: event.clientY, moved: false };
+      gesture = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, previousX: event.clientX, previousY: event.clientY, moved: false };
       canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener("pointermove", (event) => {
       const state = stateRef.current;
-      if (!gesture || gesture.pointerId !== event.pointerId || !state.display || (wallpaperMode && state.layout.locked)) return;
+      if (!gesture || gesture.pointerId !== event.pointerId || !state.display) return;
       const dx = event.clientX - gesture.previousX;
       const dy = event.clientY - gesture.previousY;
-      gesture.moved ||= Math.hypot(dx, dy) > 1;
+      gesture.moved ||= Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4;
+      gesture.previousX = event.clientX;
+      gesture.previousY = event.clientY;
+      if (wallpaperMode && state.layout.locked) return;
       if (wallpaperMode) {
         state.layout = normalizeLayout({ ...state.layout, offsetX: state.layout.offsetX + dx / Math.max(1, app.screen.width) * 100, offsetY: state.layout.offsetY + dy / Math.max(1, app.screen.height) * 100 });
         recenter();
@@ -97,16 +114,29 @@ function Stage({ model, resetSignal, onReady, onError }) {
         state.display.x += dx;
         state.display.y += dy;
       }
-      gesture.previousX = event.clientX;
-      gesture.previousY = event.clientY;
     });
     const finish = (event) => {
       if (!gesture || gesture.pointerId !== event.pointerId) return;
-      if (wallpaperMode && gesture.moved) window.webkit?.messageHandlers?.wallpaperTransform?.postMessage(stateRef.current.layout);
+      const moved = gesture.moved;
       gesture = null;
+      const state = stateRef.current;
+      if (wallpaperMode && moved) {
+        window.webkit?.messageHandlers?.wallpaperTransform?.postMessage(state.layout);
+        return;
+      }
+      if (moved || !state.spine || !state.interaction) return;
+      const spine = state.spine;
+      const entry = spine.state.setAnimation(0, state.interaction, false);
+      if (state.idle && state.idle !== state.interaction) spine.state.addAnimation(0, state.idle, true, 0);
+      state.onReady?.({ model: state.model, spine, animations: state.animations, current: state.interaction });
+      entry.listener = {
+        complete: () => {
+          if (stateRef.current.spine === spine && state.idle) state.onReady?.({ model: state.model, spine, animations: state.animations, current: state.idle });
+        },
+      };
     };
     canvas.addEventListener("pointerup", finish);
-    canvas.addEventListener("pointercancel", finish);
+    canvas.addEventListener("pointercancel", () => { gesture = null; });
     canvas.addEventListener("wheel", (event) => {
       event.preventDefault();
       const state = stateRef.current;
@@ -145,20 +175,21 @@ function Stage({ model, resetSignal, onReady, onError }) {
       if (state.display) state.app.stage.removeChild(state.display);
       state.display?.destroy({ children: true });
       state.loader?.destroy?.();
-      Object.assign(state, { display: null, spine: null, loader: null });
+      Object.assign(state, { display: null, spine: null, loader: null, model: null, animations: [], idle: null, interaction: null });
       try {
         const loaded = await loadSpine(model);
         if (cancelled) { loaded.spine.destroy({ children: true }); loaded.loader.destroy(); return; }
         const container = new PIXI.Container();
         loaded.spine.scale.y = -1;
         const names = (loaded.spine.spineData?.animations || []).map((animation) => animation.name);
-        const initial = names.find((name) => /(^|[_-])(idle|loop)([_-]|$)/i.test(name)) || names[0];
+        const initial = idleAnimation(names);
+        const interaction = interactionAnimation(names);
         if (initial) loaded.spine.state.setAnimation(0, initial, true);
         loaded.spine.update(0);
         container.addChild(loaded.spine);
         const bounds = container.getLocalBounds();
         container.pivot.set(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-        Object.assign(state, { display: container, spine: loaded.spine, loader: loaded.loader });
+        Object.assign(state, { display: container, spine: loaded.spine, loader: loaded.loader, model, animations: names, idle: initial, interaction });
         state.app.stage.addChild(container);
         state.recenter();
         onReady({ model, spine: loaded.spine, animations: names, current: initial });
@@ -285,7 +316,7 @@ function App() {
         {!wallpaperMode && selectedGroup && <nav className="variants"><div className="variant-label"><b>02</b><span>DISPLAY MODE<small>展示模式</small></span></div>{visibleModels.map((model, index) => <button key={model.id} className={selectedModel?.id === model.id ? "active" : ""} onClick={() => { setSelectedModel(model); setRuntime(null); }}><em>0{index + 1}</em><span><strong>{model.kind.toUpperCase()}</strong><small>{KIND_LABELS[model.kind] || model.kind}</small></span></button>)}</nav>}
         <Stage model={selectedModel} resetSignal={resetSignal} onReady={onReady} onError={onError} />
         {!wallpaperMode && <div className="viewport-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><span>LIVE VIEW</span></div>}
-        {!wallpaperMode && <div className="stage-hint"><span>DRAG</span> 移动画面 <i></i><span>SCROLL</span> 调整缩放 <i></i><span>R</span> 复位</div>}
+        {!wallpaperMode && <div className="stage-hint"><span>CLICK</span> 播放交互 <i></i><span>DRAG</span> 移动画面 <i></i><span>SCROLL</span> 调整缩放 <i></i><span>R</span> 复位</div>}
         {!wallpaperMode && <aside className={`controls ${inspectorOpen ? "open" : ""}`}>
           <div className="inspector-head"><div className="section-heading"><span>03</span><div><strong>MODEL CONTROL</strong><small>模型控制</small></div></div><button className="panel-close" onClick={() => setInspectorOpen(false)} aria-label="关闭模型信息">×</button></div>
           <div className="control-title"><span>MODEL PROFILE</span><button onClick={() => setResetSignal((value) => value + 1)}>↺ RESET</button></div>
