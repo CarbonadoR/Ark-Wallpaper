@@ -11,6 +11,17 @@ const wallpaperMode = params.get("wallpaper") === "1";
 const requestedModel = params.get("model") || "";
 const initialLayout = layoutFromSearch(params);
 const KIND_LABELS = { DynIllust: "动态立绘", DynPortrait: "动态头像", DynIllustStart: "入场动画", BattleFront: "战斗前景", BattleBack: "战斗背景" };
+const TYPE_FILTERS = [
+  ["all", "ALL", "全部"],
+  ["DynIllust", "ILLUST", "立绘"],
+  ["DynPortrait", "PORTRAIT", "头像"],
+  ["DynIllustStart", "ENTRY", "入场"],
+  ["Battle", "BATTLE", "战斗"],
+];
+
+function modelMatchesFilter(model, filter) {
+  return filter === "all" || model.kind === filter || (filter === "Battle" && model.kind.startsWith("Battle"));
+}
 
 function preferredModel(group) {
   return group?.models.find((model) => model.kind === "DynIllust") || group?.models[0] || null;
@@ -165,12 +176,17 @@ function Stage({ model, resetSignal, onReady, onError }) {
 function App() {
   const [catalog, setCatalog] = useState(null);
   const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState("all");
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [selectedModel, setSelectedModel] = useState(null);
   const [runtime, setRuntime] = useState(null);
   const [error, setError] = useState("");
   const [resetSignal, setResetSignal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     fetch("/api/catalog").then((response) => response.ok ? response.json() : Promise.reject(new Error(`目录请求失败 (${response.status})`))).then((data) => {
@@ -185,41 +201,102 @@ function App() {
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return catalog?.groups || [];
-    return (catalog?.groups || []).filter((group) => `${group.id} ${group.name} ${group.skinName}`.toLowerCase().includes(needle));
-  }, [catalog, query]);
+    return (catalog?.groups || []).filter((group) =>
+      group.models.some((model) => modelMatchesFilter(model, kindFilter))
+      && (!needle || `${group.id} ${group.name} ${group.skinName}`.toLowerCase().includes(needle)),
+    );
+  }, [catalog, query, kindFilter]);
+  const visibleModels = useMemo(() => {
+    const models = selectedGroup?.models || [];
+    const matching = models.filter((model) => modelMatchesFilter(model, kindFilter));
+    return matching.length ? matching : models;
+  }, [selectedGroup, kindFilter]);
   const onReady = useCallback((value) => { setRuntime(value); setError(""); }, []);
   const onError = useCallback((reason) => { setRuntime(null); setError(reason.message || String(reason)); }, []);
-  const chooseGroup = (group) => { setSelectedGroup(group); setSelectedModel(preferredModel(group)); setRuntime(null); setError(""); };
+  const chooseGroup = (group) => {
+    const matching = group.models.filter((model) => modelMatchesFilter(model, kindFilter));
+    setSelectedGroup(group);
+    setSelectedModel(matching[0] || preferredModel(group));
+    setRuntime(null);
+    setError("");
+    setLibraryOpen(false);
+  };
+  const chooseFilter = (filter) => {
+    setKindFilter(filter);
+    if (!selectedGroup) return;
+    const matching = selectedGroup.models.filter((model) => modelMatchesFilter(model, filter));
+    if (matching.length && !matching.some((model) => model.id === selectedModel?.id)) {
+      setSelectedModel(matching[0]);
+      setRuntime(null);
+    }
+  };
   const play = (name) => { runtime?.spine.state.setAnimation(0, name, true); setRuntime((current) => current ? { ...current, current: name } : current); };
+  const copyModelId = async () => {
+    if (!selectedModel) return;
+    await navigator.clipboard.writeText(selectedModel.id);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "/" && document.activeElement?.tagName !== "INPUT") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (event.key.toLowerCase() === "r" && document.activeElement?.tagName !== "INPUT") setResetSignal((value) => value + 1);
+      if (event.key === "Escape") { setLibraryOpen(false); setInspectorOpen(false); searchRef.current?.blur(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <main className={wallpaperMode ? "app wallpaper" : "app"}>
-      {!wallpaperMode && <aside className="library">
-        <header><div className="mark">AK</div><div><strong>DYNCHARS</strong><small>SPINE 3.8 LAB</small></div></header>
-        <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资源 ID / 角色名" /></label>
-        <div className="library-meta"><span>{filtered.length} / {catalog?.stats.groups || 0} 组</span><span>{catalog?.stats.models || 0} 模型</span></div>
+      {!wallpaperMode && <aside className={`library ${libraryOpen ? "open" : ""}`}>
+        <header className="brand-block">
+          <div className="brand-word">ARKNIGHTS</div>
+          <div className="brand-caption"><strong>RHODES ISLAND</strong><small>DYNAMIC ASSET TERMINAL</small></div>
+          <button className="panel-close" onClick={() => setLibraryOpen(false)} aria-label="关闭资源目录">×</button>
+        </header>
+        <div className="section-heading"><span>01</span><div><strong>ASSET INDEX</strong><small>资源目录</small></div></div>
+        <label className="search"><span>⌕</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="检索资源 ID / 角色名" />{query && <button onClick={() => setQuery("")} aria-label="清空搜索">×</button>}<kbd>/</kbd></label>
+        <div className="type-filters" aria-label="资源类型筛选">
+          {TYPE_FILTERS.map(([key, english, chinese]) => <button key={key} className={kindFilter === key ? "active" : ""} onClick={() => chooseFilter(key)}><strong>{english}</strong><small>{chinese}</small></button>)}
+        </div>
+        <div className="library-meta"><span><b>{String(filtered.length).padStart(2, "0")}</b> / {String(catalog?.stats.groups || 0).padStart(2, "0")} GROUPS</span><span>{catalog?.stats.models || 0} MODELS</span></div>
         <div className="group-list">
           {filtered.map((group) => <button key={group.id} className={selectedGroup?.id === group.id ? "group active" : "group"} onClick={() => chooseGroup(group)}>
-            <span className="diamond">◇</span><span><strong>{group.name}</strong><small>{group.skinName || group.id}</small></span><em>{group.models.length}</em>
+            <span className="group-index">{String((catalog?.groups || []).indexOf(group) + 1).padStart(2, "0")}</span><span><strong>{group.name}</strong><small>{group.skinName || group.id}</small></span><em>{group.models.length}<i>›</i></em>
           </button>)}
+          {!loading && !filtered.length && <div className="empty-results"><b>NO RESULT</b><span>没有符合当前条件的资源</span><button onClick={() => { setQuery(""); chooseFilter("all"); }}>清除筛选</button></div>}
         </div>
-        <footer>未提供角色名时使用资源组 ID；可稍后通过 metadata JSON 补全。</footer>
+        <footer><span>LOCAL DATABASE</span><b>{catalog?.stats.issues ? `${catalog.stats.issues} ISSUES` : "SYSTEM NORMAL"}</b><small>角色元数据缺失时显示稳定资源 ID</small></footer>
       </aside>}
 
       <section className="viewer">
-        {!wallpaperMode && <header className="topbar"><div><small>{selectedGroup?.id || "NO RESOURCE"}</small><h1>{selectedGroup?.name || "Arknights Dynamic Viewer"}</h1></div><div className="stats"><span>SPINE 3.8</span><span>{catalog?.stats.models || "—"} ASSETS</span></div></header>}
-        {!wallpaperMode && selectedGroup && <nav className="variants">{selectedGroup.models.map((model) => <button key={model.id} className={selectedModel?.id === model.id ? "active" : ""} onClick={() => { setSelectedModel(model); setRuntime(null); }}><strong>{KIND_LABELS[model.kind] || model.kind}</strong><small>{model.id}</small></button>)}</nav>}
+        {!wallpaperMode && <header className="topbar">
+          <button className="mobile-trigger" onClick={() => setLibraryOpen(true)} aria-label="打开资源目录"><i></i><i></i><i></i></button>
+          <div className="title-block"><div className="eyebrow"><span>OPERATOR / DYNAMIC ARCHIVE</span><small>{selectedGroup?.id || "NO RESOURCE"}</small></div><h1>{selectedGroup?.name || "Arknights Dynamic Viewer"}</h1><p>{selectedGroup?.skinName || "LOCAL SPINE ASSET INSPECTION SYSTEM"}</p></div>
+          <nav className="top-nav" aria-label="页面状态"><span className="active"><b>INDEX</b><small>索引</small></span><span><b>OPERATOR</b><small>干员</small></span><span><b>ANIMATION</b><small>动作</small></span></nav>
+          <div className="system-stats"><span><i></i>ONLINE</span><b>{catalog?.stats.models || "—"}</b><small>ASSETS</small></div>
+          <button className="mobile-inspector" onClick={() => setInspectorOpen(true)} aria-label="打开模型信息">i</button>
+        </header>}
+        {!wallpaperMode && selectedGroup && <nav className="variants"><div className="variant-label"><b>02</b><span>DISPLAY MODE<small>展示模式</small></span></div>{visibleModels.map((model, index) => <button key={model.id} className={selectedModel?.id === model.id ? "active" : ""} onClick={() => { setSelectedModel(model); setRuntime(null); }}><em>0{index + 1}</em><span><strong>{model.kind.toUpperCase()}</strong><small>{KIND_LABELS[model.kind] || model.kind}</small></span></button>)}</nav>}
         <Stage model={selectedModel} resetSignal={resetSignal} onReady={onReady} onError={onError} />
-        {!wallpaperMode && <aside className="controls">
-          <div className="control-title"><span>MODEL INSPECTOR</span><button onClick={() => setResetSignal((value) => value + 1)}>重置视图</button></div>
-          {selectedModel && <div className="facts"><div><small>模型 ID</small><code>{selectedModel.id}</code></div><div><small>资源类型</small><b>{KIND_LABELS[selectedModel.kind] || selectedModel.kind}</b></div><div><small>骨骼</small><b>{selectedModel.spineVersion} · {selectedModel.format}</b></div><div><small>纹理</small><b>{selectedModel.textureCount} 页</b></div></div>}
-          <div className="action-title"><span>ANIMATIONS</span><em>{runtime?.animations.length || 0}</em></div>
-          <div className="actions">{runtime?.animations.map((name) => <button key={name} className={runtime.current === name ? "active" : ""} onClick={() => play(name)}><span>▶</span>{name}</button>)}</div>
-          <p className="hint">拖动画面调整位置 · 滚轮缩放 · 动作默认循环播放</p>
+        {!wallpaperMode && <div className="viewport-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><span>LIVE VIEW</span></div>}
+        {!wallpaperMode && <div className="stage-hint"><span>DRAG</span> 移动画面 <i></i><span>SCROLL</span> 调整缩放 <i></i><span>R</span> 复位</div>}
+        {!wallpaperMode && <aside className={`controls ${inspectorOpen ? "open" : ""}`}>
+          <div className="inspector-head"><div className="section-heading"><span>03</span><div><strong>MODEL CONTROL</strong><small>模型控制</small></div></div><button className="panel-close" onClick={() => setInspectorOpen(false)} aria-label="关闭模型信息">×</button></div>
+          <div className="control-title"><span>MODEL PROFILE</span><button onClick={() => setResetSignal((value) => value + 1)}>↺ RESET</button></div>
+          {selectedModel && <div className="facts"><div className="wide"><small>MODEL IDENTIFICATION</small><code>{selectedModel.id}</code><button onClick={copyModelId}>{copied ? "COPIED" : "COPY"}</button></div><div><small>ASSET TYPE</small><b>{KIND_LABELS[selectedModel.kind] || selectedModel.kind}</b></div><div><small>RUNTIME</small><b>SPINE {selectedModel.spineVersion}</b></div><div><small>DATA FORMAT</small><b>{selectedModel.format.toUpperCase()}</b></div><div><small>TEXTURE</small><b>{selectedModel.textureCount} PAGE{selectedModel.textureCount > 1 ? "S" : ""}</b></div></div>}
+          <div className="action-title"><span><b>ANIMATION SET</b><small>动作列表</small></span><em>{String(runtime?.animations.length || 0).padStart(2, "0")}</em></div>
+          <div className="actions">{runtime?.animations.map((name, index) => <button key={name} className={runtime.current === name ? "active" : ""} onClick={() => play(name)}><em>{String(index + 1).padStart(2, "0")}</em><span><b>{name}</b><small>{runtime.current === name ? "PLAYING / LOOP" : "READY"}</small></span><i>▶</i></button>)}</div>
+          <p className="hint"><span></span> 动作以循环模式播放 / LOOP ENABLED</p>
         </aside>}
-        {!wallpaperMode && loading && <div className="notice">正在扫描本地资源…</div>}
+        {!wallpaperMode && loading && <div className="notice"><i></i><div><b>CONNECTING DATABASE</b><span>正在扫描本地动态资源</span></div></div>}
         {error && <div className="error"><b>模型载入失败</b><span>{error}</span></div>}
+        {!wallpaperMode && (libraryOpen || inspectorOpen) && <button className="panel-scrim" aria-label="关闭面板" onClick={() => { setLibraryOpen(false); setInspectorOpen(false); }}></button>}
       </section>
     </main>
   );
