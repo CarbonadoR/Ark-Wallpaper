@@ -10,7 +10,8 @@
     "test": "node --test",
     "audit": "node scripts/audit-resources.mjs",
     "macos:build": "npm run build && node scripts/build-macos-app.mjs",
-    "macos:run": "npm run macos:build && open -n \"build/macos/Arknights Dynamic Wallpaper.app\""
+    "macos:run": "npm run macos:build && open -n \"build/macos/Arknights Dynamic Wallpaper.app\"",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.2",
     "concurrently": "^9.2.1",
+    "patch-package": "^8.0.1",
     "vite": "^7.1.5"
   }
 }

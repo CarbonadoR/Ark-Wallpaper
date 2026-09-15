@@ -1,0 +1,26 @@
+diff --git a/node_modules/@pixi-spine/base/lib/base.es.js b/node_modules/@pixi-spine/base/lib/base.es.js
+index 129cb17..6c92590 100644
+--- a/node_modules/@pixi-spine/base/lib/base.es.js
++++ b/node_modules/@pixi-spine/base/lib/base.es.js
+@@ -1816,7 +1816,7 @@ var SpineBase = /** @class */ (function (_super) {
+                     slotContainer.parent = this;
+                 }
+             }
+-            if (slot.currentGraphics && slot.getAttachment()) {
++            if (slot.currentGraphics && slot.getAttachment().type === AttachmentType.Clipping) {
+                 clippingContainer = slot.clippingContainer;
+                 clippingAttachment = slot.getAttachment();
+                 clippingContainer.children.length = 0;
+diff --git a/node_modules/@pixi-spine/base/lib/base.js b/node_modules/@pixi-spine/base/lib/base.js
+index 36b2e00..4e6029d 100644
+--- a/node_modules/@pixi-spine/base/lib/base.js
++++ b/node_modules/@pixi-spine/base/lib/base.js
+@@ -1820,7 +1820,7 @@ var SpineBase = /** @class */ (function (_super) {
+                     slotContainer.parent = this;
+                 }
+             }
+-            if (slot.currentGraphics && slot.getAttachment()) {
++            if (slot.currentGraphics && slot.getAttachment().type === AttachmentType.Clipping) {
+                 clippingContainer = slot.clippingContainer;
+                 clippingAttachment = slot.getAttachment();
+                 clippingContainer.children.length = 0;
