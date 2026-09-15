@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { detectPngAlphaMode } from "./png-alpha.mjs";
 
 const TEXTURE_PATTERN = /\.(?:png|webp|jpe?g)$/i;
 
@@ -142,6 +143,17 @@ export function publicCatalog(index) {
 }
 
 export function virtualAtlas(model) {
-  const aliases = new Map((model.pageNames || model.pages).map((page, index) => [page, `texture-${index}${path.extname(model.pages[index]).toLowerCase()}`]));
-  return fs.readFileSync(model.atlasPath, "utf8").split(/(\r?\n)/).map((part) => aliases.get(part.trim()) || part).join("");
+  const aliases = new Map((model.pageNames || model.pages).map((page, index) => [page, {
+    name: `texture-${index}${path.extname(model.pages[index]).toLowerCase()}`,
+    alphaMode: model.pageAlphaModes?.[index]
+      || (path.extname(model.pages[index]).toLowerCase() === ".png" && fs.existsSync(path.join(path.dirname(model.atlasPath), model.pages[index]))
+        ? detectPngAlphaMode(path.join(path.dirname(model.atlasPath), model.pages[index]))
+        : "straight"),
+  }]));
+  const source = fs.readFileSync(model.atlasPath, "utf8");
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  return source.split(/\r?\n/).flatMap((line) => {
+    const alias = aliases.get(line.trim());
+    return alias ? [alias.name, ...(alias.alphaMode === "pma" ? ["pma: true"] : [])] : [line];
+  }).join(newline);
 }

@@ -48,6 +48,9 @@ function loadSpine(model) {
         spineAtlasFile: model.atlasUrl,
         // These PNG atlases contain straight alpha. Premultiply them while
         // uploading so linear filtering does not expose pale RGB edge pixels.
+        // Straight-alpha pages are premultiplied during upload. The local API
+        // marks already-premultiplied pages with `pma: true` in the atlas so
+        // pixi-spine leaves those pixels untouched.
         imageMetadata: { alphaMode: PIXI.ALPHA_MODES.UNPACK },
       },
     });

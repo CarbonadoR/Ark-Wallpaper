@@ -30,6 +30,15 @@ test("virtual atlas aliases fragment-sensitive and multi-page texture names", ()
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("virtual atlas marks only premultiplied texture pages", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-atlas-alpha-"));
+  const atlasPath = path.join(root, "model.atlas");
+  fs.writeFileSync(atlasPath, "first.png\nsize: 1,1\n\nsecond.png\nsize: 1,1\n");
+  const output = virtualAtlas({ atlasPath, pages: ["first.png", "second.png"], pageAlphaModes: ["pma", "straight"] });
+  assert.match(output, /^texture-0\.png\npma: true\nsize: 1,1/m);
+  assert.match(output, /\ntexture-1\.png\nsize: 1,1/m);
+});
+
 test("scanner repairs numbered extraction atlas texture references", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-numbered-atlas-"));
   const directory = path.join(root, "char_test_2", "DynIllust", "dyn_test");
