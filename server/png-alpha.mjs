@@ -3,6 +3,13 @@ import zlib from "node:zlib";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const alphaModeCache = new Map();
+// Dark straight-alpha pixels can satisfy RGB <= alpha just like premultiplied
+// pixels, so their encoding cannot always be inferred from pixel values alone.
+// These resource families use a consistent export pipeline and need an
+// explicit mode before falling back to the pixel heuristic below.
+const ALPHA_MODE_OVERRIDES = [
+  { pattern: /ambiencesynesthesia/i, mode: "straight" },
+];
 
 function paeth(left, up, upperLeft) {
   const prediction = left + up - upperLeft;
@@ -13,6 +20,8 @@ function paeth(left, up, upperLeft) {
 }
 
 export function detectPngAlphaMode(filePath) {
+  const override = ALPHA_MODE_OVERRIDES.find(({ pattern }) => pattern.test(filePath));
+  if (override) return override.mode;
   const stat = fs.statSync(filePath);
   const cacheKey = `${stat.size}:${stat.mtimeMs}`;
   const cached = alphaModeCache.get(filePath);

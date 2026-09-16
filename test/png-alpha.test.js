@@ -37,3 +37,13 @@ test("detects premultiplied and straight-alpha PNG pixels", () => {
   assert.equal(detectPngAlphaMode(straight), "straight");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("uses straight alpha for Ambience Synesthesia resources with ambiguous dark pixels", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
+  const directory = path.join(root, "char_test_AmbienceSynesthesia#1");
+  const texture = path.join(directory, "texture.png");
+  fs.mkdirSync(directory);
+  fs.writeFileSync(texture, rgbaPng([32, 16, 0, 128]));
+  assert.equal(detectPngAlphaMode(texture), "straight");
+  fs.rmSync(root, { recursive: true, force: true });
+});
