@@ -4,17 +4,22 @@ import express from "express";
 import { config } from "./config.mjs";
 import { publicBackgrounds, scanBackgrounds } from "./backgrounds.mjs";
 import { publicCatalog, scanResources, virtualAtlas } from "./catalog.mjs";
+import { mergeStaticArt, scanStaticArt } from "./static-art.mjs";
 
 const app = express();
 app.disable("x-powered-by");
-let index = scanResources(config.resourceRoot, config.metadataFile);
+const buildIndex = () => mergeStaticArt(
+  scanResources(config.resourceRoot, config.metadataFile),
+  scanStaticArt(config),
+);
+let index = buildIndex();
 let backgrounds = scanBackgrounds(config.backgroundRoot);
 const findModel = (id) => index.models.find((model) => model.id === id);
 
 app.get("/api/status", (_request, response) => response.json({ ready: true, ...publicCatalog(index).stats, backgrounds: backgrounds.length }));
 app.get("/api/catalog", (request, response) => {
   if (request.query.refresh === "1") {
-    index = scanResources(config.resourceRoot, config.metadataFile);
+    index = buildIndex();
     backgrounds = scanBackgrounds(config.backgroundRoot);
   }
   response.json(publicCatalog(index));
@@ -34,17 +39,29 @@ app.get("/api/backgrounds/:id/:side", (request, response) => {
 });
 app.get("/api/models/:id/model.atlas", (request, response) => {
   const model = findModel(request.params.id);
-  if (!model) return response.status(404).json({ error: "模型不存在" });
+  if (!model?.atlasPath) return response.status(404).json({ error: "动态模型不存在" });
   response.type("text/plain").send(virtualAtlas(model));
+});
+app.get("/api/models/:id/image.png", (request, response) => {
+  const model = findModel(request.params.id);
+  if (!model?.imagePath) return response.status(404).json({ error: "静态立绘不存在" });
+  response.set("Cache-Control", "public, max-age=31536000, immutable");
+  response.type("image/png").sendFile(model.imagePath);
+});
+app.get("/api/models/:id/alpha.png", (request, response) => {
+  const model = findModel(request.params.id);
+  if (!model?.alphaPath) return response.status(404).json({ error: "Alpha 遮罩不存在" });
+  response.set("Cache-Control", "public, max-age=31536000, immutable");
+  response.type("image/png").sendFile(model.alphaPath);
 });
 app.get("/api/models/:id/skeleton.:format", (request, response) => {
   const model = findModel(request.params.id);
-  if (!model) return response.status(404).json({ error: "模型不存在" });
+  if (!model?.skeletonPath) return response.status(404).json({ error: "动态模型不存在" });
   response.type(model.skeletonFormat === "binary" ? "application/octet-stream" : "application/json").sendFile(model.skeletonPath);
 });
 app.get("/api/models/:id/:texture", (request, response) => {
   const model = findModel(request.params.id);
-  if (!model) return response.status(404).json({ error: "模型不存在" });
+  if (!model?.atlasPath) return response.status(404).json({ error: "动态模型不存在" });
   const match = /^texture-(\d+)\.[a-z0-9]+$/i.exec(request.params.texture);
   const page = match ? model.pages[Number(match[1])] : null;
   if (!page) return response.status(404).json({ error: "纹理不存在" });

@@ -132,7 +132,7 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
 .search > button { position: absolute; right: 31px; top: 9px; padding: 0; background: transparent; color: #7b858a; cursor: pointer; font-size: 17px; }
 .search kbd { position: absolute; right: 10px; top: 12px; color: #596368; font: 9px var(--font-mono); }
 
-.type-filters { display: grid; grid-template-columns: repeat(5, 1fr); margin: 0 16px 14px; border: 1px solid var(--line); }
+.type-filters { display: grid; grid-template-columns: repeat(6, 1fr); margin: 0 16px 14px; border: 1px solid var(--line); }
 .type-filters button { position: relative; min-width: 0; padding: 7px 2px 6px; border-right: 1px solid var(--line-soft); background: rgba(0,0,0,.18); color: #626c71; cursor: pointer; transition: .2s; }
 .type-filters button:last-child { border-right: 0; }
 .type-filters button::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
@@ -298,6 +298,10 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
 .actions button.active > em, .actions button.active > i, .actions button.active > span small { color: var(--cyan); }
 .hint { margin: 0; padding: 10px; border-top: 1px solid var(--line); color: #586267; font-size: 7px; letter-spacing: .06em; text-align: center; }
 .hint span { display: inline-block; width: 5px; height: 5px; margin-right: 4px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 7px var(--cyan); }
+.static-info { flex: 1; display: grid; align-content: center; justify-items: center; gap: 8px; padding: 24px; color: #596368; text-align: center; }
+.static-info::before { content: "◇"; color: var(--cyan); font: 42px var(--font-display); }
+.static-info b { color: #929b9f; font: 11px var(--font-display); letter-spacing: .12em; }
+.static-info span { max-width: 190px; font-size: 8px; letter-spacing: .04em; }
 
 .notice, .error { position: absolute; z-index: 30; left: 50%; bottom: 38px; transform: translateX(-50%); }
 .notice { display: flex; align-items: center; gap: 12px; min-width: 230px; padding: 12px 15px; border-left: 2px solid var(--cyan); background: rgba(4,7,8,.94); box-shadow: 0 12px 40px rgba(0,0,0,.4); }

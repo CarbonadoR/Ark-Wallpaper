@@ -6,3 +6,6 @@ config/metadata.local.json
 .DS_Store
 *.log
 /arts/
+/charpack/
+/skinpack/
+/chartable/

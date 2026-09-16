@@ -1,10 +1,13 @@
 # Arknights Dynamic Character Viewer
 
-用于在本地检查与展示 Spine 格式动态立绘资源的查看器，并附带 macOS 动态桌面壁纸应用。当前版本针对 `arknights-dynchars` 的实际目录结构与 Spine 3.8.99 资源进行了适配。
+用于在本地检查与展示《明日方舟》动态及静态立绘资源的查看器，并附带 macOS 桌面壁纸应用。当前版本针对 Spine 3.8.99 动态资源、`charpack` / `skinpack` 静态资源与角色表进行了适配。
 
 ## 当前能力
 
 - 自动扫描资源目录，不依赖预先存在的角色名数据库
+- 接入 `charpack` 的精英一/精英二立绘与 `skinpack` 的皮肤立绘
+- 自动合成 Unity 分离导出的颜色纹理与 Alpha 遮罩
+- 从 `chartable` 读取中文角色名和英文代号，并用于目录展示与搜索
 - 支持二进制 `.skel` 与无扩展名 JSON 骨骼
 - 支持多页 atlas、文件名不完全一致的骨骼/图集配对
 - 按资源组检索，切换动态立绘、动态头像、入场动画与战斗层
@@ -32,9 +35,14 @@ cp config/runtime.example.json config/runtime.local.json
 ```json
 {
   "resourceRoot": "../arts/dynchars",
-  "backgroundRoot": "../arts/ui/homebackground/wrapper"
+  "backgroundRoot": "../arts/ui/homebackground/wrapper",
+  "charpackRoot": "../charpack",
+  "skinpackRoot": "../skinpack",
+  "characterTableFile": "../chartable"
 }
 ```
+
+`characterTableFile` 既可指向单个角色表 JSON，也可指向目录；指向目录时会自动选择最新的 `character_table*.json`。静态立绘、动态资源和同名皮肤会合并到同一资源组。当前角色表不含正式皮肤名称，因此皮肤副标题暂时显示资源标签（例如 `summer#9`），后续可继续通过 metadata 覆盖。
 
 `config/runtime.local.json` 不会被 Git 跟踪。角色名元数据可参照 `config/metadata.example.json` 创建 `config/metadata.local.json`：
 
@@ -68,7 +76,7 @@ npm start
 npm run macos:run
 ```
 
-在查看器的 Model Inspector 中可找到稳定的 16 位模型 ID，壁纸菜单可用该 ID 切换资源。模型 ID 根据 atlas 相对路径生成，添加角色名元数据不会改变它。
+在查看器的 Model Inspector 中可找到稳定的 16 位资源 ID，壁纸菜单可用该 ID 切换动态或静态立绘。动态模型 ID 根据 atlas 相对路径生成，静态资源 ID 根据图片相对路径生成；添加角色名元数据不会改变它。
 
 壁纸页面同时预留了背景图片和背景 Spine 的分层接口。单图可通过 `backgroundImage` / `bgImage` 传入；高清拼接图可通过 `backgroundImageLeft` 与 `backgroundImageRight` 传入。`backgroundSpine` / `bgSpine` 用于标记背景 Spine 资源 ID；运行时可调用 `window.__setWallpaperBackground({ color, imageUrl, imageUrls, spineId })` 更新背景配置。背景 Spine 当前只创建独立挂载层，待资源接口确定后可直接接入渲染器。
 

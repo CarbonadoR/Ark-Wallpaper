@@ -3,5 +3,8 @@
   "port": 8791,
   "resourceRoot": "../arts/dynchars",
   "backgroundRoot": "../arts/ui/homebackground/wrapper",
+  "charpackRoot": "../charpack",
+  "skinpackRoot": "../skinpack",
+  "characterTableFile": "../chartable",
   "metadataFile": "./metadata.local.json"
 }

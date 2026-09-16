@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         statusLabel.isEnabled = false
         menu.addItem(statusLabel)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "选择模型 ID…", action: #selector(selectModel), keyEquivalent: "s"))
+        menu.addItem(NSMenuItem(title: "选择资源 ID…", action: #selector(selectModel), keyEquivalent: "s"))
         menu.addItem(NSMenuItem(title: "壁纸外观、尺寸与位置…", action: #selector(showLayout), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "重新加载壁纸", action: #selector(reload), keyEquivalent: "r"))
         interactionItem = NSMenuItem(title: "启用壁纸交互", action: #selector(toggleInteraction), keyEquivalent: "i")
@@ -271,8 +271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     @objc private func selectModel() {
         NSApp.activate(ignoringOtherApps: true)
-        let input = NSTextField(string: modelID); input.placeholderString = "查看器中的 16 位模型 ID"; input.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        let alert = NSAlert(); alert.messageText = "选择动态壁纸模型"; alert.informativeText = "从完整查看器的 Model Inspector 复制模型 ID；留空则自动选择第一个动态立绘。"; alert.accessoryView = input; alert.addButton(withTitle: "应用"); alert.addButton(withTitle: "取消")
+        let input = NSTextField(string: modelID); input.placeholderString = "查看器中的 16 位资源 ID"; input.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        let alert = NSAlert(); alert.messageText = "选择壁纸资源"; alert.informativeText = "从完整查看器的 Model Inspector 复制动态或静态资源 ID；留空则自动选择第一个可用资源。"; alert.accessoryView = input; alert.addButton(withTitle: "应用"); alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let value = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value.isEmpty || value.range(of: "^[0-9a-f]{16}$", options: .regularExpression) != nil else { NSSound.beep(); return }
