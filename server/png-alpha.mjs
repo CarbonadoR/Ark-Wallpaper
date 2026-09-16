@@ -16,6 +16,9 @@ const STRAIGHT_ALPHA_RATIO = 0.9;
 // pixels that cannot be identified from RGB <= alpha alone.
 const STRAIGHT_REGION_RATIO = 0.1;
 const MIN_REGION_PARTIAL_PIXELS = 16;
+const HAZE_REGION_RATIO = 0.8;
+const MIN_HAZE_PARTIAL_PIXELS = 128;
+const HAZE_REGION_PATTERN = /(?:smoke|smock|fog|mist|light|glow|halo|aura|(?:^|[_/])(?:eff|fx)(?:[_/]|$)|(?:^|[_/])ring(?:[_/]|$))/i;
 // Dark straight-alpha pixels can satisfy RGB <= alpha just like premultiplied
 // pixels, so their encoding cannot always be inferred from pixel values alone.
 // These resource families use a consistent export pipeline and need an
@@ -174,18 +177,20 @@ function atlasRegions(atlasPath, pageName) {
   return regions.flatMap((region) => {
     if (region.bounds) {
       const [x, y, width, height] = region.bounds;
-      return [{ x, y, width, height }];
+      return [{ name: region.name, x, y, width, height }];
     }
     if (!region.xy || !region.size) return [];
     const [x, y] = region.xy;
     const [sourceWidth, sourceHeight] = region.size;
-    return [{ x, y, width: region.rotate ? sourceHeight : sourceWidth, height: region.rotate ? sourceWidth : sourceHeight }];
+    return [{ name: region.name, x, y, width: region.rotate ? sourceHeight : sourceWidth, height: region.rotate ? sourceWidth : sourceHeight }];
   });
 }
 
-function straightRegionMask(image, regions) {
-  if (!regions.length) return null;
-  const mask = new Uint8Array(image.width * image.height);
+function regionMasks(image, regions) {
+  if (!regions.length) return { straight: null, haze: null, hasHaze: false };
+  const straight = new Uint8Array(image.width * image.height);
+  const haze = new Uint8Array(image.width * image.height);
+  let hasHaze = false;
   for (const region of regions) {
     const right = Math.min(image.width, region.x + region.width);
     const bottom = Math.min(image.height, region.y + region.height);
@@ -200,12 +205,19 @@ function straightRegionMask(image, regions) {
         if (Math.max(image.pixels[index], image.pixels[index + 1], image.pixels[index + 2]) > alpha + 2) straightAlphaPixels += 1;
       }
     }
-    if (partialPixels < MIN_REGION_PARTIAL_PIXELS || straightAlphaPixels / partialPixels < STRAIGHT_REGION_RATIO) continue;
+    const straightRatio = partialPixels ? straightAlphaPixels / partialPixels : 0;
+    const normalizeStraight = partialPixels >= MIN_REGION_PARTIAL_PIXELS && straightRatio >= STRAIGHT_REGION_RATIO;
+    const attenuateHaze = partialPixels >= MIN_HAZE_PARTIAL_PIXELS && straightRatio >= HAZE_REGION_RATIO && HAZE_REGION_PATTERN.test(region.name);
+    if (!normalizeStraight && !attenuateHaze) continue;
+    hasHaze ||= attenuateHaze;
     for (let y = Math.max(0, region.y); y < bottom; y += 1) {
-      mask.fill(1, y * image.width + Math.max(0, region.x), y * image.width + right);
+      const start = y * image.width + Math.max(0, region.x);
+      const end = y * image.width + right;
+      if (normalizeStraight) straight.fill(1, start, end);
+      if (attenuateHaze) haze.fill(1, start, end);
     }
   }
-  return mask;
+  return { straight, haze, hasHaze };
 }
 
 export function inspectPngAlpha(filePath) {
@@ -228,29 +240,35 @@ export function inspectPngAlpha(filePath) {
 }
 
 export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "straight", atlasPath = null, pageName = null } = {}) {
-  if (!alphaPath && alphaMode !== "pma") return null;
   const key = [fileFingerprint(colorPath), alphaPath ? fileFingerprint(alphaPath) : "", atlasPath ? fileFingerprint(atlasPath) : "", pageName || "", alphaMode].join("|");
   if (renderedTextureCache.has(key)) return renderedTextureCache.get(key);
   const color = decodeRgbaPng(colorPath);
   if (!color) return null;
+  const masks = regionMasks(color, atlasRegions(atlasPath, pageName));
+  if (!alphaPath && alphaMode !== "pma" && !masks.hasHaze) return null;
 
   if (alphaPath) {
     const mask = decodeRgbaPng(alphaPath);
     if (!mask || mask.width !== color.width || mask.height !== color.height) throw new Error("动态纹理与 Alpha 遮罩尺寸不一致");
     for (let index = 0; index < color.pixels.length; index += 4) color.pixels[index + 3] = mask.pixels[index];
   } else {
-    const regionMask = straightRegionMask(color, atlasRegions(atlasPath, pageName));
     for (let index = 0; index < color.pixels.length; index += 4) {
-      const alpha = color.pixels[index + 3];
+      const sourceAlpha = color.pixels[index + 3];
+      const alpha = masks.haze?.[index / 4] ? Math.round(sourceAlpha * sourceAlpha * sourceAlpha / (255 * 255)) : sourceAlpha;
       const maximum = Math.max(color.pixels[index], color.pixels[index + 1], color.pixels[index + 2]);
-      if (alpha === 0) {
+      color.pixels[index + 3] = alpha;
+      if (sourceAlpha === 0) {
         color.pixels[index] = 0;
         color.pixels[index + 1] = 0;
         color.pixels[index + 2] = 0;
-      } else if (regionMask?.[index / 4] || maximum > alpha + 2) {
+      } else if (alphaMode === "pma" && (masks.straight?.[index / 4] || maximum > sourceAlpha + 2)) {
         color.pixels[index] = Math.round(color.pixels[index] * alpha / 255);
         color.pixels[index + 1] = Math.round(color.pixels[index + 1] * alpha / 255);
         color.pixels[index + 2] = Math.round(color.pixels[index + 2] * alpha / 255);
+      } else if (alphaMode === "pma" && alpha !== sourceAlpha) {
+        color.pixels[index] = Math.round(color.pixels[index] * alpha / sourceAlpha);
+        color.pixels[index + 1] = Math.round(color.pixels[index + 1] * alpha / sourceAlpha);
+        color.pixels[index + 2] = Math.round(color.pixels[index + 2] * alpha / sourceAlpha);
       }
     }
   }

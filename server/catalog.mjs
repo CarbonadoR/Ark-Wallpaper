@@ -6,7 +6,7 @@ import { detectPngAlphaMode } from "./png-alpha.mjs";
 const TEXTURE_PATTERN = /\.(?:png|webp|jpe?g)$/i;
 // Bump whenever server-side texture composition or alpha normalization changes
 // so immutable browser and wallpaper caches cannot reuse an older rendering.
-const TEXTURE_PIPELINE_VERSION = "alpha-v5";
+const TEXTURE_PIPELINE_VERSION = "alpha-v9";
 
 function pngDimensions(filePath) {
   if (!filePath || path.extname(filePath).toLowerCase() !== ".png") return null;

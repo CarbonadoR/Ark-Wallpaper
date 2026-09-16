@@ -126,6 +126,30 @@ test("normalizes ambiguous dark pixels inside straight-alpha atlas regions", () 
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("attenuates broad low-alpha haze attachments without changing their RGB", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-haze-"));
+  const texture = path.join(root, "texture.png");
+  const atlas = path.join(root, "model.atlas");
+  fs.writeFileSync(texture, rgbaRowPng(Array.from({ length: 128 }, () => [255, 240, 224, 128])));
+  fs.writeFileSync(atlas, [
+    "texture.png",
+    "size: 128,1",
+    "format: RGBA8888",
+    "filter: Linear,Linear",
+    "repeat: none",
+    "background_glow",
+    "  rotate: false",
+    "  xy: 0, 0",
+    "  size: 128, 1",
+    "  orig: 128, 1",
+    "  offset: 0, 0",
+    "  index: -1",
+  ].join("\n"));
+  const normalized = renderTexturePng(texture, { alphaMode: "straight", atlasPath: atlas, pageName: "texture.png" });
+  assert.deepEqual(decodedRow(normalized).slice(-4), [255, 240, 224, 32]);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test("composes a separately exported alpha mask", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
   const texture = path.join(root, "texture.png");
