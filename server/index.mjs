@@ -2,17 +2,35 @@ import fs from "node:fs";
 import path from "node:path";
 import express from "express";
 import { config } from "./config.mjs";
+import { publicBackgrounds, scanBackgrounds } from "./backgrounds.mjs";
 import { publicCatalog, scanResources, virtualAtlas } from "./catalog.mjs";
 
 const app = express();
 app.disable("x-powered-by");
 let index = scanResources(config.resourceRoot, config.metadataFile);
+let backgrounds = scanBackgrounds(config.backgroundRoot);
 const findModel = (id) => index.models.find((model) => model.id === id);
 
-app.get("/api/status", (_request, response) => response.json({ ready: true, ...publicCatalog(index).stats }));
+app.get("/api/status", (_request, response) => response.json({ ready: true, ...publicCatalog(index).stats, backgrounds: backgrounds.length }));
 app.get("/api/catalog", (request, response) => {
-  if (request.query.refresh === "1") index = scanResources(config.resourceRoot, config.metadataFile);
+  if (request.query.refresh === "1") {
+    index = scanResources(config.resourceRoot, config.metadataFile);
+    backgrounds = scanBackgrounds(config.backgroundRoot);
+  }
   response.json(publicCatalog(index));
+});
+app.get("/api/backgrounds", (_request, response) => response.json({ backgrounds: publicBackgrounds(backgrounds) }));
+app.get("/api/backgrounds/:id/image", (request, response) => {
+  const background = backgrounds.find((entry) => entry.id === request.params.id);
+  if (!background) return response.status(404).json({ error: "背景不存在" });
+  response.set("Cache-Control", "public, max-age=31536000, immutable");
+  response.type("image/png").sendFile(background.imagePath);
+});
+app.get("/api/backgrounds/:id/:side", (request, response) => {
+  const background = backgrounds.find((entry) => entry.id === request.params.id);
+  if (!background || !["left", "right"].includes(request.params.side)) return response.status(404).json({ error: "背景不存在" });
+  response.set("Cache-Control", "public, max-age=31536000, immutable");
+  response.type("image/png").sendFile(request.params.side === "left" ? background.leftPath : background.rightPath);
 });
 app.get("/api/models/:id/model.atlas", (request, response) => {
   const model = findModel(request.params.id);

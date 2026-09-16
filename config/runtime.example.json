@@ -1,6 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 8791,
-  "resourceRoot": "../arknights-dynchars",
+  "resourceRoot": "../arts/dynchars",
+  "backgroundRoot": "../arts/ui/homebackground/wrapper",
   "metadataFile": "./metadata.local.json"
 }

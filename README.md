@@ -15,6 +15,7 @@
 - 支持复制稳定模型 ID，以及 `/` 聚焦检索、`R` 复位、`Esc` 关闭面板等快捷键
 - macOS 多屏桌面壁纸、交互开关、填充模式、位置/缩放和布局锁定
 - macOS 系统色轮选择壁纸背景色，并持久化到下次启动
+- 从 `arts/ui/homebackground` 自动发现主页背景，可选择模糊版或由左右原图拼接的高清版
 - 按纹理与资源批次识别直通/预乘 Alpha，避免部件黑边、白边和半透明雾团
 - 可选本地 metadata 覆盖层，后续可无侵入补充角色名与皮肤名
 
@@ -24,6 +25,15 @@
 
 ```bash
 cp config/runtime.example.json config/runtime.local.json
+```
+
+新的完整美术包目录结构如下，动态模型与主页背景分别配置：
+
+```json
+{
+  "resourceRoot": "../arts/dynchars",
+  "backgroundRoot": "../arts/ui/homebackground/wrapper"
+}
 ```
 
 `config/runtime.local.json` 不会被 Git 跟踪。角色名元数据可参照 `config/metadata.example.json` 创建 `config/metadata.local.json`：
@@ -60,7 +70,7 @@ npm run macos:run
 
 在查看器的 Model Inspector 中可找到稳定的 16 位模型 ID，壁纸菜单可用该 ID 切换资源。模型 ID 根据 atlas 相对路径生成，添加角色名元数据不会改变它。
 
-壁纸页面同时预留了背景图片和背景 Spine 的分层接口。可通过 `backgroundImage` / `bgImage` 传入背景图地址，通过 `backgroundSpine` / `bgSpine` 标记背景 Spine 资源 ID；运行时可调用 `window.__setWallpaperBackground({ color, imageUrl, spineId })` 更新背景配置。背景 Spine 当前只创建独立挂载层，待资源接口确定后可直接接入渲染器。
+壁纸页面同时预留了背景图片和背景 Spine 的分层接口。单图可通过 `backgroundImage` / `bgImage` 传入；高清拼接图可通过 `backgroundImageLeft` 与 `backgroundImageRight` 传入。`backgroundSpine` / `bgSpine` 用于标记背景 Spine 资源 ID；运行时可调用 `window.__setWallpaperBackground({ color, imageUrl, imageUrls, spineId })` 更新背景配置。背景 Spine 当前只创建独立挂载层，待资源接口确定后可直接接入渲染器。
 
 ## 资源说明
 

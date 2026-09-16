@@ -5,3 +5,4 @@ config/runtime.local.json
 config/metadata.local.json
 .DS_Store
 *.log
+/arts/

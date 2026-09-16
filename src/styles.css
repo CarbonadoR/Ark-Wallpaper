@@ -314,6 +314,8 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
 .wallpaper .viewer { width: 100%; height: 100%; }
 .wallpaper-background { position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
 .wallpaper-background-image { width: 100%; height: 100%; display: block; object-fit: cover; }
+.wallpaper-background-panorama { width: 100%; height: 100%; display: flex; }
+.wallpaper-background-panorama img { width: 50%; height: 100%; display: block; object-fit: fill; }
 .wallpaper-background-spine { position: absolute; inset: 0; }
 .wallpaper .stage { z-index: 1; inset: 0; }
 .wallpaper .viewer::before { z-index: 2; opacity: .1; }

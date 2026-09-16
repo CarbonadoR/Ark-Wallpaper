@@ -1,6 +1,7 @@
 export const DEFAULT_WALLPAPER_BACKGROUND = Object.freeze({
   color: "#000000",
   imageUrl: "",
+  imageUrls: [],
   spineId: "",
 });
 
@@ -17,17 +18,25 @@ function imageUrl(value) {
 }
 
 export function normalizeWallpaperBackground(settings = {}) {
+  const imageUrls = (Array.isArray(settings.imageUrls) ? settings.imageUrls : [settings.imageUrl])
+    .map(imageUrl)
+    .filter(Boolean)
+    .slice(0, 2);
   return {
     color: color(settings.color),
-    imageUrl: imageUrl(settings.imageUrl),
+    imageUrl: imageUrls.length === 1 ? imageUrls[0] : "",
+    imageUrls,
     spineId: String(settings.spineId || "").trim().slice(0, 128),
   };
 }
 
 export function wallpaperBackgroundFromSearch(searchParams) {
+  const left = searchParams.get("backgroundImageLeft") || searchParams.get("bgImageLeft");
+  const right = searchParams.get("backgroundImageRight") || searchParams.get("bgImageRight");
   return normalizeWallpaperBackground({
     color: searchParams.get("background") || searchParams.get("bg"),
     imageUrl: searchParams.get("backgroundImage") || searchParams.get("bgImage"),
+    imageUrls: left && right ? [left, right] : undefined,
     spineId: searchParams.get("backgroundSpine") || searchParams.get("bgSpine"),
   });
 }

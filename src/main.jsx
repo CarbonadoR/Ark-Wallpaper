@@ -212,7 +212,10 @@ function Stage({ model, resetSignal, onReady, onError }) {
 function WallpaperBackground({ settings }) {
   return (
     <div className="wallpaper-background" style={{ backgroundColor: settings.color }} aria-hidden="true">
-      {settings.imageUrl && <img className="wallpaper-background-image" src={settings.imageUrl} alt="" />}
+      {settings.imageUrls.length === 1 && <img className="wallpaper-background-image" src={settings.imageUrls[0]} alt="" />}
+      {settings.imageUrls.length === 2 && <div className="wallpaper-background-panorama">
+        {settings.imageUrls.map((url) => <img key={url} src={url} alt="" />)}
+      </div>}
       <div className="wallpaper-background-spine" data-model-id={settings.spineId || undefined}></div>
     </div>
   );

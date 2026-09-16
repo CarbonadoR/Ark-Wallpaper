@@ -8,6 +8,16 @@ final class WallpaperWindow: NSWindow {
     override var canBecomeMain: Bool { true }
 }
 
+private struct WallpaperBackground: Decodable {
+    let id: String
+    let name: String
+    let imageUrls: [String]
+}
+
+private struct WallpaperBackgroundCatalog: Decodable {
+    let backgrounds: [WallpaperBackground]
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
     private var statusItem: NSStatusItem!
@@ -21,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var yControl: NSSlider?
     private var lockControl: NSButton?
     private var backgroundColorControl: NSColorWell?
+    private var backgroundImageControl: NSPopUpButton?
     private var scaleLabel: NSTextField?
     private var xLabel: NSTextField?
     private var yLabel: NSTextField?
@@ -29,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var serverProcess: Process?
     private var interactionEnabled = false
     private var paused = false
+    private var backgrounds: [WallpaperBackground] = []
     private let fitKeys = ["contain", "cover", "width", "height", "stretch"]
     private let fitLabels = ["适应屏幕（完整显示）", "覆盖屏幕（自动裁切）", "宽度铺满（裁切上下）", "高度铺满（裁切左右）", "拉伸铺满（非等比）"]
 
@@ -51,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let value = UserDefaults.standard.string(forKey: "backgroundColor") ?? "#000000"
         return value.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) == nil ? "#000000" : value.uppercased()
     }
+    private var backgroundImageID: String { UserDefaults.standard.string(forKey: "backgroundImageID") ?? "" }
+    private var backgroundImageURLs: [String] { backgrounds.first(where: { $0.id == backgroundImageID })?.imageUrls ?? [] }
 
     private func color(from hex: String) -> NSColor {
         var value: UInt64 = 0
@@ -74,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         Task {
             if !(await serverReady()) { launchServer(); guard await waitForServer() else { showStartupError(); return } }
+            await loadBackgrounds()
             statusLabel.title = modelID.isEmpty ? "运行中 · 自动选择首个模型" : "运行中 · \(modelID)"
             rebuildWindows()
         }
@@ -133,9 +148,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         return false
     }
 
+    private func loadBackgrounds() async {
+        var request = URLRequest(url: serverURL.appendingPathComponent("api/backgrounds")); request.timeoutInterval = 3
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { backgrounds = []; return }
+            backgrounds = try JSONDecoder().decode(WallpaperBackgroundCatalog.self, from: data).backgrounds
+        } catch {
+            backgrounds = []
+        }
+    }
+
     private func wallpaperURL() -> URL {
         var parts = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
         var items = [URLQueryItem(name: "wallpaper", value: "1"), URLQueryItem(name: "fit", value: fitMode), URLQueryItem(name: "scale", value: String(scale)), URLQueryItem(name: "x", value: String(offsetX)), URLQueryItem(name: "y", value: String(offsetY)), URLQueryItem(name: "locked", value: layoutLocked ? "1" : "0"), URLQueryItem(name: "background", value: backgroundColorHex)]
+        if backgroundImageURLs.count == 1 {
+            items.append(URLQueryItem(name: "backgroundImage", value: backgroundImageURLs[0]))
+        } else if backgroundImageURLs.count == 2 {
+            items.append(URLQueryItem(name: "backgroundImageLeft", value: backgroundImageURLs[0]))
+            items.append(URLQueryItem(name: "backgroundImageRight", value: backgroundImageURLs[1]))
+        }
         if !modelID.isEmpty { items.append(URLQueryItem(name: "model", value: modelID)) }
         parts.queryItems = items
         return parts.url!
@@ -180,9 +212,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     @objc private func showLayout() {
         if let settingsPanel { NSApp.activate(ignoringOtherApps: true); settingsPanel.makeKeyAndOrderFront(nil); return }
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 430), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 480), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         panel.title = "壁纸外观、尺寸与位置"; panel.isFloatingPanel = true; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false; panel.level = .floating; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.center()
         let content = NSView(frame: panel.contentView?.bounds ?? .zero); panel.contentView = content
+        content.addSubview(label("背景图", NSRect(x: 24, y: 432, width: 110, height: 20)))
+        let backgroundImage = NSPopUpButton(frame: NSRect(x: 145, y: 426, width: 270, height: 28)); backgroundImage.addItem(withTitle: "无（仅背景色）"); backgroundImage.addItems(withTitles: backgrounds.map(\.name)); backgroundImage.selectItem(at: (backgrounds.firstIndex(where: { $0.id == backgroundImageID }).map { $0 + 1 }) ?? 0); backgroundImage.target = self; backgroundImage.action = #selector(backgroundImageChanged); content.addSubview(backgroundImage)
         content.addSubview(label("背景颜色", NSRect(x: 24, y: 382, width: 110, height: 20)))
         let backgroundColor = NSColorWell(frame: NSRect(x: 145, y: 376, width: 72, height: 28)); backgroundColor.color = color(from: backgroundColorHex); backgroundColor.target = self; backgroundColor.action = #selector(backgroundColorChanged); backgroundColor.isContinuous = true; content.addSubview(backgroundColor)
         NSColorPanel.shared.showsAlpha = false
@@ -201,7 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let hint = label("解锁后可在交互模式中拖动壁纸或用滚轮缩放；所有调整会自动保存。", NSRect(x: 24, y: 77, width: 392, height: 34), secondary: true); hint.maximumNumberOfLines = 2; content.addSubview(hint)
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetLayout)); reset.frame = NSRect(x: 24, y: 22, width: 96, height: 32); content.addSubview(reset)
         let done = NSButton(title: "完成", target: self, action: #selector(closeLayout)); done.keyEquivalent = "\r"; done.frame = NSRect(x: 320, y: 22, width: 96, height: 32); content.addSubview(done)
-        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; backgroundColorControl = backgroundColor; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
+        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; backgroundColorControl = backgroundColor; backgroundImageControl = backgroundImage; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
         NSApp.activate(ignoringOtherApps: true); panel.orderFrontRegardless(); panel.makeKey()
     }
     private func updateLabels() { scaleLabel?.stringValue = String(format: "%.0f%%", (scaleControl?.doubleValue ?? 1) * 100); xLabel?.stringValue = String(format: "%+.0f%%", xControl?.doubleValue ?? 0); yLabel?.stringValue = String(format: "%+.0f%%", yControl?.doubleValue ?? 0) }
@@ -219,14 +253,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         UserDefaults.standard.set(hex(from: backgroundColorControl.color), forKey: "backgroundColor")
         applyBackground()
     }
+    @objc private func backgroundImageChanged() {
+        guard let backgroundImageControl else { return }
+        let index = backgroundImageControl.indexOfSelectedItem - 1
+        UserDefaults.standard.set(backgrounds.indices.contains(index) ? backgrounds[index].id : "", forKey: "backgroundImageID")
+        applyBackground()
+    }
     private func applyBackground() {
-        let values: [String: Any] = ["color": backgroundColorHex]
+        let values: [String: Any] = ["color": backgroundColorHex, "imageUrl": backgroundImageURLs.count == 1 ? backgroundImageURLs[0] : "", "imageUrls": backgroundImageURLs]
         guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
         webViews.forEach { $0.evaluateJavaScript("window.__setWallpaperBackground?.(\(json))") }
         let nativeColor = color(from: backgroundColorHex)
         windows.forEach { $0.backgroundColor = nativeColor }
     }
-    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; backgroundColorControl?.color = .black; layoutChanged(); backgroundColorChanged() }
+    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; backgroundColorControl?.color = .black; backgroundImageControl?.selectItem(at: 0); layoutChanged(); backgroundColorChanged(); backgroundImageChanged() }
     @objc private func closeLayout() { settingsPanel?.orderOut(nil) }
 
     @objc private func selectModel() {
