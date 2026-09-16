@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.addItem(statusLabel)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "选择模型 ID…", action: #selector(selectModel), keyEquivalent: "s"))
-        menu.addItem(NSMenuItem(title: "尺寸与位置…", action: #selector(showLayout), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "壁纸外观、尺寸与位置…", action: #selector(showLayout), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "重新加载壁纸", action: #selector(reload), keyEquivalent: "r"))
         interactionItem = NSMenuItem(title: "启用壁纸交互", action: #selector(toggleInteraction), keyEquivalent: "i")
         menu.addItem(interactionItem)
