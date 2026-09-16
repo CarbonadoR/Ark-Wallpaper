@@ -10,7 +10,7 @@
 - 从 `chartable` 读取中文角色名和英文代号，并用于目录展示与搜索
 - 支持二进制 `.skel` 与无扩展名 JSON 骨骼
 - 支持多页 atlas、文件名不完全一致的骨骼/图集配对
-- 按资源组检索，切换动态立绘、动态头像、入场动画与战斗层
+- 每名干员只占一个目录条目，并在条目内依次切换精英一、精英二、各皮肤的静态与动态资源
 - 可按资源类型筛选目录，并在窄屏设备使用滑出式资源目录与模型信息面板
 - 枚举并播放骨骼内全部动画
 - 点击画布播放模型交互动作，并在结束后自动回到待机动作
@@ -42,7 +42,7 @@ cp config/runtime.example.json config/runtime.local.json
 }
 ```
 
-`characterTableFile` 既可指向单个角色表 JSON，也可指向目录；指向目录时会自动选择最新的 `character_table*.json`。静态立绘、动态资源和同名皮肤会合并到同一资源组。当前角色表不含正式皮肤名称，因此皮肤副标题暂时显示资源标签（例如 `summer#9`），后续可继续通过 metadata 覆盖。
+`characterTableFile` 既可指向单个角色表 JSON，也可指向目录；指向目录时会自动选择最新的 `character_table*.json`。同一干员的普通立绘、全部皮肤、动态立绘与动态头像会合并到唯一的干员条目中，条目内按精英一、精英二、其他服装排列，并在同一服装内依次显示静态立绘、动态立绘和动态头像。当前角色表不含正式皮肤名称，因此部分服装暂时显示资源标签（例如 `summer#9`），后续可继续通过 metadata 覆盖。
 
 `config/runtime.local.json` 不会被 Git 跟踪。角色名元数据可参照 `config/metadata.example.json` 创建 `config/metadata.local.json`：
 

@@ -40,20 +40,34 @@ test("scans elite and skin art while ignoring portrait thumbnails", () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test("merges regular static art into the default dynamic group and applies names", () => {
+test("merges every outfit and resource for an operator into one ordered group", () => {
   const dynamic = {
-    groups: [{ id: "char_test_2", name: "char_test_2", skinName: "", models: [{ id: "spine", kind: "DynIllust", label: "dynamic" }] }],
-    models: [{ id: "spine", kind: "DynIllust", label: "dynamic" }],
+    groups: [
+      { id: "char_test_2", name: "char_test_2", skinName: "", models: [{ id: "elite-dyn", kind: "DynIllust", label: "elite dynamic" }] },
+      { id: "char_test_summer#1", name: "char_test_summer#1", skinName: "盛夏", models: [
+        { id: "skin-dyn", kind: "DynIllust", label: "skin dynamic" },
+        { id: "portrait-dyn", kind: "DynPortrait", label: "portrait dynamic" },
+      ] },
+    ],
+    models: [],
     issues: [],
   };
   const staticArt = {
     characters: { char_test: { Name: "测试干员", Appellation: "Tester" } },
-    models: [{ id: "image", groupId: "char_test", characterId: "char_test", kind: "StaticE2", label: "精英二立绘", mediaType: "image" }],
+    models: [
+      { id: "elite-one", groupId: "char_test", characterId: "char_test", kind: "StaticE1", label: "精英一立绘", mediaType: "image" },
+      { id: "elite-two", groupId: "char_test", characterId: "char_test", kind: "StaticE2", label: "精英二立绘", mediaType: "image" },
+      { id: "skin-static", groupId: "char_test_summer#1", characterId: "char_test", kind: "StaticSkin", label: "皮肤立绘", mediaType: "image" },
+    ],
   };
   const result = mergeStaticArt(dynamic, staticArt);
   assert.equal(result.groups.length, 1);
-  assert.equal(result.groups[0].id, "char_test_2");
+  assert.equal(result.groups[0].id, "char_test");
   assert.equal(result.groups[0].name, "测试干员");
   assert.deepEqual(result.groups[0].aliases, ["Tester", "测试干员"]);
-  assert.deepEqual(result.groups[0].models.map((model) => model.id), ["image", "spine"]);
+  assert.deepEqual(result.groups[0].outfits, ["精英一", "精英二", "盛夏"]);
+  assert.equal(result.groups[0].skinName, "3 个造型 · 6 项资源");
+  assert.deepEqual(result.groups[0].models.map((model) => model.id), ["elite-one", "elite-two", "elite-dyn", "skin-static", "skin-dyn", "portrait-dyn"]);
+  assert.deepEqual(result.groups[0].models.map((model) => model.outfit), ["精英一", "精英二", "精英二", "盛夏", "盛夏", "盛夏"]);
+  assert.equal(result.models.every((model) => model.groupId === "char_test"), true);
 });

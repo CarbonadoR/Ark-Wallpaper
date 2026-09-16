@@ -134,41 +134,100 @@ function characterForGroup(groupId, characters) {
   return id ? { id, ...characters[id] } : null;
 }
 
-export function mergeStaticArt(index, staticArt) {
-  const groups = new Map(index.groups.map((group) => [group.id.toLowerCase(), { ...group, models: [...group.models] }]));
-  const defaultDynamicGroups = new Map(index.groups
-    .filter((group) => /_2$/i.test(group.id))
-    .map((group) => [group.id.slice(0, -2).toLowerCase(), group.id]));
+function outfitForGroup(group, character) {
+  if (group.skinName) return group.skinName;
+  if (!character) return "动态资源";
+  if (group.id.toLowerCase() === character.id.toLowerCase()) return "默认服装";
+  const suffix = group.id.slice(character.id.length + 1);
+  return suffix === "2" ? "精英二" : suffix || "默认服装";
+}
 
-  for (const model of staticArt.models) {
-    const requestedGroup = model.kind === "StaticE1" || model.kind === "StaticE2"
-      ? defaultDynamicGroups.get(model.groupId.toLowerCase()) || model.groupId
-      : model.groupId;
-    const key = requestedGroup.toLowerCase();
-    const existing = groups.get(key);
-    if (existing) {
-      model.groupId = existing.id;
-      existing.models.push(model);
-    } else {
-      model.groupId = requestedGroup;
-      groups.set(key, { id: requestedGroup, name: requestedGroup, skinName: "", models: [model] });
-    }
+function outfitForStatic(model) {
+  if (model.kind === "StaticE1") return "精英一";
+  if (model.kind === "StaticE2") return "精英二";
+  const suffix = model.groupId.slice(model.characterId.length + 1);
+  return suffix || "默认服装";
+}
+
+function normalizedOutfit(value) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function modelOrder(model) {
+  const outfit = normalizedOutfit(model.outfit || "");
+  if (model.kind === "StaticE1" || outfit === "精英一") return 0;
+  if (model.kind === "StaticE2" || outfit === "精英二") return 1;
+  if (outfit === "默认服装") return 2;
+  return 3;
+}
+
+export function mergeStaticArt(index, staticArt) {
+  const groups = new Map();
+  const ensureGroup = (id, character, fallbackName = id) => {
+    const key = id.toLowerCase();
+    if (!groups.has(key)) groups.set(key, {
+      id,
+      name: character?.Name || character?.Appellation || fallbackName,
+      aliases: [character?.Appellation, character?.Name].filter(Boolean),
+      models: [],
+      outfitNames: new Map(),
+    });
+    return groups.get(key);
+  };
+
+  for (const sourceGroup of index.groups) {
+    const character = characterForGroup(sourceGroup.id, staticArt.characters);
+    const targetId = character?.id || sourceGroup.id;
+    const customName = sourceGroup.name !== sourceGroup.id ? sourceGroup.name : targetId;
+    const group = ensureGroup(targetId, character, customName);
+    if (sourceGroup.name !== sourceGroup.id) group.name = sourceGroup.name;
+    const outfitId = sourceGroup.id;
+    const outfit = outfitForGroup(sourceGroup, character);
+    group.outfitNames.set(outfitId.toLowerCase(), outfit);
+    group.models.push(...sourceGroup.models.map((model) => ({
+      ...model,
+      groupId: group.id,
+      characterId: character?.id,
+      outfitId,
+      outfit,
+    })));
   }
 
-  const kindOrder = { StaticE1: 0, StaticE2: 1, StaticSkin: 2, DynIllust: 3, DynPortrait: 4, DynIllustStart: 5, BattleFront: 6, BattleBack: 7 };
+  for (const sourceModel of staticArt.models) {
+    const character = staticArt.characters[sourceModel.characterId]
+      ? { id: sourceModel.characterId, ...staticArt.characters[sourceModel.characterId] }
+      : null;
+    const targetId = character?.id || sourceModel.characterId || sourceModel.groupId;
+    const group = ensureGroup(targetId, character);
+    const outfitId = sourceModel.kind === "StaticE1"
+      ? `${sourceModel.characterId}_1`
+      : sourceModel.kind === "StaticE2"
+        ? `${sourceModel.characterId}_2`
+        : sourceModel.groupId;
+    const outfit = group.outfitNames.get(outfitId.toLowerCase()) || outfitForStatic(sourceModel);
+    if (!group.outfitNames.has(outfitId.toLowerCase())) group.outfitNames.set(outfitId.toLowerCase(), outfit);
+    group.models.push({ ...sourceModel, groupId: group.id, outfitId, outfit });
+  }
+
+  const kindOrder = { StaticE1: 0, StaticE2: 0, StaticSkin: 0, DynIllust: 1, DynPortrait: 2, DynIllustStart: 3, BattleFront: 4, BattleBack: 5 };
   const mergedGroups = [...groups.values()].map((group) => {
-    const character = characterForGroup(group.id, staticArt.characters);
-    const defaultName = character?.Name || character?.Appellation || group.name;
-    const suffix = group.id.slice((character?.id?.length || -1) + 1);
-    const defaultSkin = group.id === character?.id ? "常规立绘" : suffix === "2" ? "精英二 / 默认服装" : group.skinName || suffix;
+    const models = group.models.map((model) => ({
+      ...model,
+      outfit: group.outfitNames.get(model.outfitId.toLowerCase()) || model.outfit,
+    })).sort((left, right) => modelOrder(left) - modelOrder(right)
+      || (modelOrder(left) === 3 ? left.outfit.localeCompare(right.outfit, "zh-CN", { numeric: true }) : 0)
+      || (kindOrder[left.kind] ?? 99) - (kindOrder[right.kind] ?? 99)
+      || left.label.localeCompare(right.label, "zh-CN", { numeric: true }));
+    const outfits = [...new Map(models.map((model) => [normalizedOutfit(model.outfit), model.outfit])).values()];
     return {
-      ...group,
-      name: group.name === group.id ? defaultName : group.name,
-      skinName: group.skinName || defaultSkin,
-      aliases: [character?.Appellation, character?.Name].filter(Boolean),
-      models: group.models.sort((left, right) => (kindOrder[left.kind] ?? 99) - (kindOrder[right.kind] ?? 99) || left.label.localeCompare(right.label)),
+      id: group.id,
+      name: group.name,
+      skinName: `${outfits.length} 个造型 · ${models.length} 项资源`,
+      aliases: group.aliases,
+      outfits,
+      models,
     };
-  }).sort((left, right) => left.name.localeCompare(right.name, "zh-CN") || left.skinName.localeCompare(right.skinName, "zh-CN"));
+  }).sort((left, right) => left.name.localeCompare(right.name, "zh-CN") || left.id.localeCompare(right.id));
 
   return {
     groups: mergedGroups,

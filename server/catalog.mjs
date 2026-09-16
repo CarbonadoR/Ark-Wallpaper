@@ -129,10 +129,13 @@ export function publicCatalog(index) {
       name: group.name,
       skinName: group.skinName,
       aliases: group.aliases || [],
+      outfits: group.outfits || [],
       models: group.models.map((model) => ({
         id: model.id,
         kind: model.kind,
         label: model.label,
+        outfit: model.outfit,
+        outfitId: model.outfitId,
         mediaType: model.mediaType || "spine",
         format: model.skeletonFormat,
         spineVersion: model.spineVersion,

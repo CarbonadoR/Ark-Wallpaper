@@ -311,7 +311,7 @@ function App() {
     const needle = query.trim().toLowerCase();
     return (catalog?.groups || []).filter((group) =>
       group.models.some((model) => modelMatchesFilter(model, kindFilter))
-      && (!needle || `${group.id} ${group.name} ${group.skinName} ${(group.aliases || []).join(" ")}`.toLowerCase().includes(needle)),
+      && (!needle || `${group.id} ${group.name} ${group.skinName} ${(group.aliases || []).join(" ")} ${(group.outfits || []).join(" ")}`.toLowerCase().includes(needle)),
     );
   }, [catalog, query, kindFilter]);
   const visibleModels = useMemo(() => {
@@ -391,7 +391,7 @@ function App() {
           <div className="system-stats"><span><i></i>ONLINE</span><b>{catalog?.stats.models || "—"}</b><small>ASSETS</small></div>
           <button className="mobile-inspector" onClick={() => setInspectorOpen(true)} aria-label="打开模型信息">i</button>
         </header>}
-        {!wallpaperMode && selectedGroup && <nav className="variants"><div className="variant-label"><b>02</b><span>DISPLAY MODE<small>展示模式</small></span></div>{visibleModels.map((model, index) => <button key={model.id} className={selectedModel?.id === model.id ? "active" : ""} onClick={() => { setSelectedModel(model); setRuntime(null); }}><em>{String(index + 1).padStart(2, "0")}</em><span><strong>{KIND_CODES[model.kind] || model.kind.toUpperCase()}</strong><small>{KIND_LABELS[model.kind] || model.kind}</small></span></button>)}</nav>}
+        {!wallpaperMode && selectedGroup && <nav className="variants"><div className="variant-label"><b>02</b><span>OUTFIT / DISPLAY<small>造型与展示模式</small></span></div>{visibleModels.map((model, index) => <button key={model.id} className={selectedModel?.id === model.id ? "active" : ""} onClick={() => { setSelectedModel(model); setRuntime(null); }} title={`${model.outfit || "未分类"} · ${KIND_LABELS[model.kind] || model.kind}`}><em>{String(index + 1).padStart(2, "0")}</em><span><strong>{model.outfit || KIND_CODES[model.kind] || model.kind.toUpperCase()}</strong><small>{KIND_LABELS[model.kind] || model.kind}</small></span></button>)}</nav>}
         <Stage model={selectedModel} resetSignal={resetSignal} onReady={onReady} onError={onError} />
         {!wallpaperMode && <div className="viewport-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><span>LIVE VIEW</span></div>}
         {!wallpaperMode && <div className="stage-hint">{selectedModel?.mediaType === "spine" && <><span>CLICK</span> 播放交互 <i></i></>}<span>DRAG</span> 移动画面 <i></i><span>SCROLL</span> 调整缩放 <i></i><span>R</span> 复位</div>}
