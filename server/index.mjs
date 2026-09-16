@@ -71,7 +71,12 @@ app.get("/api/models/:id/:texture", (request, response) => {
   const colorPath = path.join(path.dirname(model.atlasPath), page);
   const alphaPath = model.pageAlphaPaths?.[pageIndex];
   const rendered = path.extname(colorPath).toLowerCase() === ".png"
-    ? renderTexturePng(colorPath, { alphaPath, alphaMode: pageAlphaMode(model, pageIndex) })
+    ? renderTexturePng(colorPath, {
+      alphaPath,
+      alphaMode: pageAlphaMode(model, pageIndex),
+      atlasPath: model.atlasPath,
+      pageName: model.pageNames?.[pageIndex] || page,
+    })
     : null;
   if (rendered) return response.type("image/png").send(rendered);
   response.sendFile(colorPath);

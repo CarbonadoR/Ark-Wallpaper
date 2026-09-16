@@ -5,10 +5,17 @@ const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const alphaModeCache = new Map();
 const renderedTextureCache = new Map();
 const MAX_RENDERED_TEXTURES = 12;
+const ATLAS_TEXTURE_PATTERN = /\.(?:png|webp|jpe?g)$/i;
 // The current art export preserves straight-looking RGB in some translucent
 // pixels even on PMA atlases. Fully straight atlases consistently exceed this
 // ratio, while known PMA atlases remain below it.
 const STRAIGHT_ALPHA_RATIO = 0.9;
+// A single atlas can contain both PMA artwork and straight-alpha effects. An
+// attachment whose translucent pixels meaningfully violate the PMA invariant
+// is normalized as one unit. This also catches dark straight-alpha
+// pixels that cannot be identified from RGB <= alpha alone.
+const STRAIGHT_REGION_RATIO = 0.1;
+const MIN_REGION_PARTIAL_PIXELS = 16;
 // Dark straight-alpha pixels can satisfy RGB <= alpha just like premultiplied
 // pixels, so their encoding cannot always be inferred from pixel values alone.
 // These resource families use a consistent export pipeline and need an
@@ -125,6 +132,82 @@ function rememberTexture(key, value) {
   return value;
 }
 
+function atlasRegions(atlasPath, pageName) {
+  if (!atlasPath || !pageName) return [];
+  const regions = [];
+  let currentPage = null;
+  let currentRegion = null;
+  for (const line of fs.readFileSync(atlasPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (!/^\s/.test(line)) {
+      if (ATLAS_TEXTURE_PATTERN.test(trimmed)) {
+        currentPage = trimmed;
+        currentRegion = null;
+      } else if (currentPage === pageName) {
+        currentRegion = { name: trimmed, rotate: false };
+        regions.push(currentRegion);
+      } else {
+        currentRegion = null;
+      }
+      continue;
+    }
+    if (!currentRegion) continue;
+    let match = trimmed.match(/^bounds:\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)/i);
+    if (match) {
+      currentRegion.bounds = match.slice(1).map(Number);
+      continue;
+    }
+    match = trimmed.match(/^xy:\s*(\d+),\s*(\d+)/i);
+    if (match) {
+      currentRegion.xy = match.slice(1).map(Number);
+      continue;
+    }
+    match = trimmed.match(/^size:\s*(\d+),\s*(\d+)/i);
+    if (match) {
+      currentRegion.size = match.slice(1).map(Number);
+      continue;
+    }
+    match = trimmed.match(/^rotate:\s*(.+)$/i);
+    if (match) currentRegion.rotate = /^(?:true|90|270)$/i.test(match[1].trim());
+  }
+  return regions.flatMap((region) => {
+    if (region.bounds) {
+      const [x, y, width, height] = region.bounds;
+      return [{ x, y, width, height }];
+    }
+    if (!region.xy || !region.size) return [];
+    const [x, y] = region.xy;
+    const [sourceWidth, sourceHeight] = region.size;
+    return [{ x, y, width: region.rotate ? sourceHeight : sourceWidth, height: region.rotate ? sourceWidth : sourceHeight }];
+  });
+}
+
+function straightRegionMask(image, regions) {
+  if (!regions.length) return null;
+  const mask = new Uint8Array(image.width * image.height);
+  for (const region of regions) {
+    const right = Math.min(image.width, region.x + region.width);
+    const bottom = Math.min(image.height, region.y + region.height);
+    let partialPixels = 0;
+    let straightAlphaPixels = 0;
+    for (let y = Math.max(0, region.y); y < bottom; y += 1) {
+      for (let x = Math.max(0, region.x); x < right; x += 1) {
+        const index = (y * image.width + x) * 4;
+        const alpha = image.pixels[index + 3];
+        if (alpha === 0 || alpha === 255) continue;
+        partialPixels += 1;
+        if (Math.max(image.pixels[index], image.pixels[index + 1], image.pixels[index + 2]) > alpha + 2) straightAlphaPixels += 1;
+      }
+    }
+    if (partialPixels < MIN_REGION_PARTIAL_PIXELS || straightAlphaPixels / partialPixels < STRAIGHT_REGION_RATIO) continue;
+    for (let y = Math.max(0, region.y); y < bottom; y += 1) {
+      mask.fill(1, y * image.width + Math.max(0, region.x), y * image.width + right);
+    }
+  }
+  return mask;
+}
+
 export function inspectPngAlpha(filePath) {
   const decoded = decodeRgbaPng(filePath);
   if (!decoded) return null;
@@ -144,9 +227,9 @@ export function inspectPngAlpha(filePath) {
   };
 }
 
-export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "straight" } = {}) {
+export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "straight", atlasPath = null, pageName = null } = {}) {
   if (!alphaPath && alphaMode !== "pma") return null;
-  const key = [fileFingerprint(colorPath), alphaPath ? fileFingerprint(alphaPath) : "", alphaMode].join("|");
+  const key = [fileFingerprint(colorPath), alphaPath ? fileFingerprint(alphaPath) : "", atlasPath ? fileFingerprint(atlasPath) : "", pageName || "", alphaMode].join("|");
   if (renderedTextureCache.has(key)) return renderedTextureCache.get(key);
   const color = decodeRgbaPng(colorPath);
   if (!color) return null;
@@ -156,6 +239,7 @@ export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "str
     if (!mask || mask.width !== color.width || mask.height !== color.height) throw new Error("动态纹理与 Alpha 遮罩尺寸不一致");
     for (let index = 0; index < color.pixels.length; index += 4) color.pixels[index + 3] = mask.pixels[index];
   } else {
+    const regionMask = straightRegionMask(color, atlasRegions(atlasPath, pageName));
     for (let index = 0; index < color.pixels.length; index += 4) {
       const alpha = color.pixels[index + 3];
       const maximum = Math.max(color.pixels[index], color.pixels[index + 1], color.pixels[index + 2]);
@@ -163,7 +247,7 @@ export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "str
         color.pixels[index] = 0;
         color.pixels[index + 1] = 0;
         color.pixels[index + 2] = 0;
-      } else if (maximum > alpha + 2) {
+      } else if (regionMask?.[index / 4] || maximum > alpha + 2) {
         color.pixels[index] = Math.round(color.pixels[index] * alpha / 255);
         color.pixels[index + 1] = Math.round(color.pixels[index + 1] * alpha / 255);
         color.pixels[index + 2] = Math.round(color.pixels[index + 2] * alpha / 255);

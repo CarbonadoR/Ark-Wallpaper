@@ -4,6 +4,9 @@ import path from "node:path";
 import { detectPngAlphaMode } from "./png-alpha.mjs";
 
 const TEXTURE_PATTERN = /\.(?:png|webp|jpe?g)$/i;
+// Bump whenever server-side texture composition or alpha normalization changes
+// so immutable browser and wallpaper caches cannot reuse an older rendering.
+const TEXTURE_PIPELINE_VERSION = "alpha-v5";
 
 function pngDimensions(filePath) {
   if (!filePath || path.extname(filePath).toLowerCase() !== ".png") return null;
@@ -48,7 +51,7 @@ function assetVersion(...filePaths) {
   const fingerprint = filePaths.filter(Boolean).map((filePath) => {
     const stat = fs.statSync(filePath);
     return `${stat.size}:${stat.mtimeMs}`;
-  }).join("|");
+  }).concat(TEXTURE_PIPELINE_VERSION).join("|");
   return crypto.createHash("sha1").update(fingerprint).digest("hex").slice(0, 10);
 }
 
@@ -135,6 +138,7 @@ export function scanResources(resourceRoot, metadataFile) {
       skeletonPath,
       skeletonFormat: skeletonPath.endsWith(".skel") ? "binary" : "json",
       spineVersion: readSpineVersion(skeletonPath),
+      assetVersion: assetVersion(atlasPath, skeletonPath, ...pageMappings.flatMap(({ sourceName, alphaPath }) => [path.join(directory, sourceName), alphaPath])),
       pages: pageMappings.map(({ sourceName }) => sourceName),
       pageNames: pageMappings.map(({ atlasName }) => atlasName),
       pageAlphaPaths: pageMappings.map(({ alphaPath }) => alphaPath),
@@ -178,8 +182,8 @@ export function publicCatalog(index) {
         format: model.skeletonFormat,
         spineVersion: model.spineVersion,
         textureCount: model.pages?.length || 0,
-        skeletonUrl: model.skeletonFormat ? `/api/models/${model.id}/skeleton.${model.skeletonFormat === "binary" ? "skel" : "json"}` : null,
-        atlasUrl: model.atlasPath ? `/api/models/${model.id}/model.atlas` : null,
+        skeletonUrl: model.skeletonFormat ? `/api/models/${model.id}/skeleton.${model.skeletonFormat === "binary" ? "skel" : "json"}?v=${model.assetVersion}` : null,
+        atlasUrl: model.atlasPath ? `/api/models/${model.id}/model.atlas?v=${model.assetVersion}` : null,
         ...(model.mediaType === "image" ? {
           format: model.format,
           width: model.width,

@@ -40,6 +40,18 @@ function rgbaRowPng(pixels) {
   ]);
 }
 
+function decodedRow(buffer) {
+  let offset = 8;
+  const chunks = [];
+  while (offset + 12 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.toString("ascii", offset + 4, offset + 8);
+    if (type === "IDAT") chunks.push(buffer.subarray(offset + 8, offset + 8 + length));
+    offset += length + 12;
+  }
+  return [...zlib.inflateSync(Buffer.concat(chunks)).subarray(1)];
+}
+
 test("detects premultiplied and straight-alpha PNG pixels", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
   const premultiplied = path.join(root, "premultiplied.png");
@@ -83,6 +95,34 @@ test("normalizes invalid transparent RGB in mixed premultiplied exports", () => 
   ]));
   fs.writeFileSync(normalized, renderTexturePng(texture, { alphaMode: "pma" }));
   assert.deepEqual(inspectPngAlpha(normalized), { partialPixels: 2, straightAlphaPixels: 0, straightRatio: 0 });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("normalizes ambiguous dark pixels inside straight-alpha atlas regions", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-region-"));
+  const texture = path.join(root, "texture.png");
+  const atlas = path.join(root, "model.atlas");
+  const sourcePixels = Array.from({ length: 20 }, (_value, index) => index < 2
+    ? [255, 180, 120, 128]
+    : [32, 16, 8, 128]);
+  fs.writeFileSync(texture, rgbaRowPng(sourcePixels));
+  fs.writeFileSync(atlas, [
+    "texture.png",
+    "size: 20,1",
+    "format: RGBA8888",
+    "filter: Linear,Linear",
+    "repeat: none",
+    "effect",
+    "  rotate: false",
+    "  xy: 0, 0",
+    "  size: 20, 1",
+    "  orig: 20, 1",
+    "  offset: 0, 0",
+    "  index: -1",
+  ].join("\n"));
+  const normalized = renderTexturePng(texture, { alphaMode: "pma", atlasPath: atlas, pageName: "texture.png" });
+  const pixels = decodedRow(normalized);
+  assert.deepEqual(pixels.slice(-4), [16, 8, 4, 128]);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

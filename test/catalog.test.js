@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { scanResources, virtualAtlas } from "../server/catalog.mjs";
+import { publicCatalog, scanResources, virtualAtlas } from "../server/catalog.mjs";
 
 function pngHeader(width = 2, height = 3) {
   const result = Buffer.alloc(24);
@@ -79,5 +79,21 @@ test("scanner pairs separately exported alpha pages and rejects mismatched masks
   fs.writeFileSync(path.join(directory, "texture[alpha].png"), pngHeader(1, 1));
   const mismatched = scanResources(root);
   assert.equal(mismatched.issues.some((issue) => issue.problem === "alpha-size-mismatch"), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("scanner versions texture URLs for immutable cache invalidation", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-versioned-atlas-"));
+  const directory = path.join(root, "char_test_2", "DynIllust", "dyn_test");
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "model.atlas"), "texture.png\nsize: 2,3\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n");
+  fs.writeFileSync(path.join(directory, "texture.png"), pngHeader());
+  fs.writeFileSync(path.join(directory, "model.skel"), Buffer.from([0, 4, 51, 46, 56]));
+  const model = scanResources(root).models[0];
+  assert.match(model.pageAssetVersions[0], /^[a-f0-9]{10}$/);
+  assert.match(virtualAtlas(model), new RegExp(`^texture-0-${model.pageAssetVersions[0]}\\.png$`, "m"));
+  const publicModel = publicCatalog({ groups: [{ id: "char_test_2", name: "Test", models: [model] }], models: [model], issues: [] }).groups[0].models[0];
+  assert.match(publicModel.atlasUrl, new RegExp(`\\?v=${model.assetVersion}$`));
+  assert.match(publicModel.skeletonUrl, new RegExp(`\\?v=${model.assetVersion}$`));
   fs.rmSync(root, { recursive: true, force: true });
 });
