@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import * as PIXI from "pixi.js";
 import { Spine, settings as spineSettings } from "pixi-spine";
 import { calculateLayout, layoutFromSearch, normalizeLayout } from "./layout.js";
+import { normalizeWallpaperBackground, wallpaperBackgroundFromSearch } from "./wallpaper-background.js";
 import "./styles.css";
 
 spineSettings.yDown = false;
@@ -10,6 +11,7 @@ const params = new URLSearchParams(location.search);
 const wallpaperMode = params.get("wallpaper") === "1";
 const requestedModel = params.get("model") || "";
 const initialLayout = layoutFromSearch(params);
+const initialWallpaperBackground = wallpaperBackgroundFromSearch(params);
 const KIND_LABELS = { DynIllust: "动态立绘", DynPortrait: "动态头像", DynIllustStart: "入场动画", BattleFront: "战斗前景", BattleBack: "战斗背景" };
 const TYPE_FILTERS = [
   ["all", "ALL", "全部"],
@@ -207,6 +209,15 @@ function Stage({ model, resetSignal, onReady, onError }) {
   return <div className="stage" ref={hostRef}>{!model && <div className="empty"><b>RHODES ISLAND</b><span>选择一项动态资源开始检查</span></div>}</div>;
 }
 
+function WallpaperBackground({ settings }) {
+  return (
+    <div className="wallpaper-background" style={{ backgroundColor: settings.color }} aria-hidden="true">
+      {settings.imageUrl && <img className="wallpaper-background-image" src={settings.imageUrl} alt="" />}
+      <div className="wallpaper-background-spine" data-model-id={settings.spineId || undefined}></div>
+    </div>
+  );
+}
+
 function App() {
   const [catalog, setCatalog] = useState(null);
   const [query, setQuery] = useState("");
@@ -220,7 +231,17 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [wallpaperBackground, setWallpaperBackground] = useState(initialWallpaperBackground);
   const searchRef = useRef(null);
+
+  useEffect(() => {
+    if (!wallpaperMode) return undefined;
+    const applyWallpaperBackground = (next) => setWallpaperBackground((current) => normalizeWallpaperBackground({ ...current, ...next }));
+    window.__setWallpaperBackground = applyWallpaperBackground;
+    return () => {
+      if (window.__setWallpaperBackground === applyWallpaperBackground) delete window.__setWallpaperBackground;
+    };
+  }, []);
 
   useEffect(() => {
     fetch("/api/catalog").then((response) => response.ok ? response.json() : Promise.reject(new Error(`目录请求失败 (${response.status})`))).then((data) => {
@@ -309,6 +330,7 @@ function App() {
       </aside>}
 
       <section className="viewer">
+        {wallpaperMode && <WallpaperBackground settings={wallpaperBackground} />}
         {!wallpaperMode && <header className="topbar">
           <button className="mobile-trigger" onClick={() => setLibraryOpen(true)} aria-label="打开资源目录"><i></i><i></i><i></i></button>
           <div className="title-block"><div className="eyebrow"><span>OPERATOR / DYNAMIC ARCHIVE</span><small>{selectedGroup?.id || "NO RESOURCE"}</small></div><h1>{selectedGroup?.name || "Arknights Dynamic Viewer"}</h1><p>{selectedGroup?.skinName || "LOCAL SPINE ASSET INSPECTION SYSTEM"}</p></div>

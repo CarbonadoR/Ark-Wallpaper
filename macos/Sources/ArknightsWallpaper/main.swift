@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var xControl: NSSlider?
     private var yControl: NSSlider?
     private var lockControl: NSButton?
+    private var backgroundColorControl: NSColorWell?
     private var scaleLabel: NSTextField?
     private var xLabel: NSTextField?
     private var yLabel: NSTextField?
@@ -46,6 +47,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var offsetX: Double { UserDefaults.standard.double(forKey: "offsetX") }
     private var offsetY: Double { UserDefaults.standard.double(forKey: "offsetY") }
     private var layoutLocked: Bool { UserDefaults.standard.object(forKey: "layoutLocked") == nil ? true : UserDefaults.standard.bool(forKey: "layoutLocked") }
+    private var backgroundColorHex: String {
+        let value = UserDefaults.standard.string(forKey: "backgroundColor") ?? "#000000"
+        return value.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) == nil ? "#000000" : value.uppercased()
+    }
+
+    private func color(from hex: String) -> NSColor {
+        var value: UInt64 = 0
+        Scanner(string: hex.replacingOccurrences(of: "#", with: "")).scanHexInt64(&value)
+        return NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xff) / 255,
+            green: CGFloat((value >> 8) & 0xff) / 255,
+            blue: CGFloat(value & 0xff) / 255,
+            alpha: 1
+        )
+    }
+
+    private func hex(from color: NSColor) -> String {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return "#000000" }
+        return String(format: "#%02X%02X%02X", Int(round(rgb.redComponent * 255)), Int(round(rgb.greenComponent * 255)), Int(round(rgb.blueComponent * 255)))
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -114,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     private func wallpaperURL() -> URL {
         var parts = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
-        var items = [URLQueryItem(name: "wallpaper", value: "1"), URLQueryItem(name: "fit", value: fitMode), URLQueryItem(name: "scale", value: String(scale)), URLQueryItem(name: "x", value: String(offsetX)), URLQueryItem(name: "y", value: String(offsetY)), URLQueryItem(name: "locked", value: layoutLocked ? "1" : "0")]
+        var items = [URLQueryItem(name: "wallpaper", value: "1"), URLQueryItem(name: "fit", value: fitMode), URLQueryItem(name: "scale", value: String(scale)), URLQueryItem(name: "x", value: String(offsetX)), URLQueryItem(name: "y", value: String(offsetY)), URLQueryItem(name: "locked", value: layoutLocked ? "1" : "0"), URLQueryItem(name: "background", value: backgroundColorHex)]
         if !modelID.isEmpty { items.append(URLQueryItem(name: "model", value: modelID)) }
         parts.queryItems = items
         return parts.url!
@@ -137,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             window.setFrame(screen.frame, display: true)
             window.level = interactionEnabled ? .normal : desktopLevel()
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-            window.backgroundColor = .black; window.isOpaque = true; window.hasShadow = false
+            window.backgroundColor = color(from: backgroundColorHex); window.isOpaque = true; window.hasShadow = false
             window.ignoresMouseEvents = !interactionEnabled; window.acceptsMouseMovedEvents = interactionEnabled; window.isReleasedWhenClosed = false
             let view = makeWebView(frame: NSRect(origin: .zero, size: screen.frame.size)); window.contentView = view
             if !paused { window.orderFrontRegardless() }
@@ -159,9 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     @objc private func showLayout() {
         if let settingsPanel { NSApp.activate(ignoringOtherApps: true); settingsPanel.makeKeyAndOrderFront(nil); return }
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 380), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        panel.title = "壁纸尺寸与位置"; panel.isFloatingPanel = true; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false; panel.level = .floating; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.center()
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 430), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        panel.title = "壁纸外观、尺寸与位置"; panel.isFloatingPanel = true; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false; panel.level = .floating; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.center()
         let content = NSView(frame: panel.contentView?.bounds ?? .zero); panel.contentView = content
+        content.addSubview(label("背景颜色", NSRect(x: 24, y: 382, width: 110, height: 20)))
+        let backgroundColor = NSColorWell(frame: NSRect(x: 145, y: 376, width: 72, height: 28)); backgroundColor.color = color(from: backgroundColorHex); backgroundColor.target = self; backgroundColor.action = #selector(backgroundColorChanged); backgroundColor.isContinuous = true; content.addSubview(backgroundColor)
+        NSColorPanel.shared.showsAlpha = false
         content.addSubview(label("填充模式", NSRect(x: 24, y: 326, width: 110, height: 20)))
         let fit = NSPopUpButton(frame: NSRect(x: 145, y: 320, width: 270, height: 28)); fit.addItems(withTitles: fitLabels); fit.selectItem(at: fitKeys.firstIndex(of: fitMode) ?? 1); fit.target = self; fit.action = #selector(layoutChanged); content.addSubview(fit)
         content.addSubview(label("缩放", NSRect(x: 24, y: 276, width: 110, height: 20)))
@@ -177,7 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let hint = label("解锁后可在交互模式中拖动壁纸或用滚轮缩放；所有调整会自动保存。", NSRect(x: 24, y: 77, width: 392, height: 34), secondary: true); hint.maximumNumberOfLines = 2; content.addSubview(hint)
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetLayout)); reset.frame = NSRect(x: 24, y: 22, width: 96, height: 32); content.addSubview(reset)
         let done = NSButton(title: "完成", target: self, action: #selector(closeLayout)); done.keyEquivalent = "\r"; done.frame = NSRect(x: 320, y: 22, width: 96, height: 32); content.addSubview(done)
-        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
+        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; backgroundColorControl = backgroundColor; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
         NSApp.activate(ignoringOtherApps: true); panel.orderFrontRegardless(); panel.makeKey()
     }
     private func updateLabels() { scaleLabel?.stringValue = String(format: "%.0f%%", (scaleControl?.doubleValue ?? 1) * 100); xLabel?.stringValue = String(format: "%+.0f%%", xControl?.doubleValue ?? 0); yLabel?.stringValue = String(format: "%+.0f%%", yControl?.doubleValue ?? 0) }
@@ -190,7 +214,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
         webViews.forEach { $0.evaluateJavaScript("window.__setWallpaperTransform?.(\(json))") }
     }
-    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; layoutChanged() }
+    @objc private func backgroundColorChanged() {
+        guard let backgroundColorControl else { return }
+        UserDefaults.standard.set(hex(from: backgroundColorControl.color), forKey: "backgroundColor")
+        applyBackground()
+    }
+    private func applyBackground() {
+        let values: [String: Any] = ["color": backgroundColorHex]
+        guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
+        webViews.forEach { $0.evaluateJavaScript("window.__setWallpaperBackground?.(\(json))") }
+        let nativeColor = color(from: backgroundColorHex)
+        windows.forEach { $0.backgroundColor = nativeColor }
+    }
+    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; backgroundColorControl?.color = .black; layoutChanged(); backgroundColorChanged() }
     @objc private func closeLayout() { settingsPanel?.orderOut(nil) }
 
     @objc private func selectModel() {
