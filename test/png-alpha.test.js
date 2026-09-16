@@ -27,6 +27,19 @@ function rgbaPng(pixel) {
   ]);
 }
 
+function rgbaRowPng(pixels) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(pixels.length, 0);
+  header.writeUInt32BE(1, 4);
+  header.set([8, 6, 0, 0, 0], 8);
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", header),
+    chunk("IDAT", zlib.deflateSync(Buffer.from([0, ...pixels.flat()]))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 test("detects premultiplied and straight-alpha PNG pixels", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
   const premultiplied = path.join(root, "premultiplied.png");
@@ -45,5 +58,16 @@ test("uses straight alpha for Ambience Synesthesia resources with ambiguous dark
   fs.mkdirSync(directory);
   fs.writeFileSync(texture, rgbaPng([32, 16, 0, 128]));
   assert.equal(detectPngAlphaMode(texture), "straight");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("tolerates straight-looking outliers in current premultiplied exports", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
+  const texture = path.join(root, "mixed-export.png");
+  fs.writeFileSync(texture, rgbaRowPng([
+    [64, 32, 0, 128],
+    [255, 128, 0, 128],
+  ]));
+  assert.equal(detectPngAlphaMode(texture), "pma");
   fs.rmSync(root, { recursive: true, force: true });
 });

@@ -3,6 +3,10 @@ import zlib from "node:zlib";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const alphaModeCache = new Map();
+// The current art export preserves straight-looking RGB in some translucent
+// pixels even on PMA atlases. Fully straight atlases consistently exceed this
+// ratio, while known PMA atlases remain below it.
+const STRAIGHT_ALPHA_RATIO = 0.9;
 // Dark straight-alpha pixels can satisfy RGB <= alpha just like premultiplied
 // pixels, so their encoding cannot always be inferred from pixel values alone.
 // These resource families use a consistent export pipeline and need an
@@ -19,15 +23,9 @@ function paeth(left, up, upperLeft) {
   return leftDistance <= upDistance && leftDistance <= upperLeftDistance ? left : upDistance <= upperLeftDistance ? up : upperLeft;
 }
 
-export function detectPngAlphaMode(filePath) {
-  const override = ALPHA_MODE_OVERRIDES.find(({ pattern }) => pattern.test(filePath));
-  if (override) return override.mode;
-  const stat = fs.statSync(filePath);
-  const cacheKey = `${stat.size}:${stat.mtimeMs}`;
-  const cached = alphaModeCache.get(filePath);
-  if (cached?.key === cacheKey) return cached.mode;
+export function inspectPngAlpha(filePath) {
   const png = fs.readFileSync(filePath);
-  if (png.length < 33 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) return "straight";
+  if (png.length < 33 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) return null;
 
   let offset = 8;
   let width = 0;
@@ -49,12 +47,12 @@ export function detectPngAlphaMode(filePath) {
       break;
     }
   }
-  if (!supported || !width || !height || !imageData.length) return "straight";
+  if (!supported || !width || !height || !imageData.length) return null;
 
   let packed;
-  try { packed = zlib.inflateSync(Buffer.concat(imageData)); } catch { return "straight"; }
+  try { packed = zlib.inflateSync(Buffer.concat(imageData)); } catch { return null; }
   const stride = width * 4;
-  if (packed.length < height * (stride + 1)) return "straight";
+  if (packed.length < height * (stride + 1)) return null;
 
   let sourceOffset = 0;
   let previous = Buffer.alloc(stride);
@@ -63,7 +61,7 @@ export function detectPngAlphaMode(filePath) {
   let straightAlphaPixels = 0;
   for (let y = 0; y < height; y += 1) {
     const filter = packed[sourceOffset++];
-    if (filter > 4) return "straight";
+    if (filter > 4) return null;
     for (let x = 0; x < stride; x += 1) {
       const value = packed[sourceOffset++];
       const left = x >= 4 ? current[x - 4] : 0;
@@ -81,7 +79,22 @@ export function detectPngAlphaMode(filePath) {
     [previous, current] = [current, previous];
   }
 
-  const mode = partialPixels && straightAlphaPixels / partialPixels < 0.01 ? "pma" : "straight";
+  return {
+    partialPixels,
+    straightAlphaPixels,
+    straightRatio: partialPixels ? straightAlphaPixels / partialPixels : 1,
+  };
+}
+
+export function detectPngAlphaMode(filePath) {
+  const override = ALPHA_MODE_OVERRIDES.find(({ pattern }) => pattern.test(filePath));
+  if (override) return override.mode;
+  const stat = fs.statSync(filePath);
+  const cacheKey = `${stat.size}:${stat.mtimeMs}`;
+  const cached = alphaModeCache.get(filePath);
+  if (cached?.key === cacheKey) return cached.mode;
+  const stats = inspectPngAlpha(filePath);
+  const mode = stats?.partialPixels && stats.straightRatio < STRAIGHT_ALPHA_RATIO ? "pma" : "straight";
   alphaModeCache.set(filePath, { key: cacheKey, mode });
   return mode;
 }
