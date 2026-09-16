@@ -71,3 +71,24 @@ test("merges every outfit and resource for an operator into one ordered group", 
   assert.deepEqual(result.groups[0].models.map((model) => model.outfit), ["精英一", "精英二", "精英二", "盛夏", "盛夏", "盛夏"]);
   assert.equal(result.models.every((model) => model.groupId === "char_test"), true);
 });
+
+test("maps alternate Amiya class resources to the canonical operator", () => {
+  const dynamic = {
+    groups: [
+      { id: "char_1001_amiya2_sale#16", name: "char_1001_amiya2_sale#16", skinName: "", models: [{ id: "guard", kind: "DynIllust", label: "guard" }] },
+      { id: "char_1037_amiya3_sale#13", name: "char_1037_amiya3_sale#13", skinName: "", models: [{ id: "medic", kind: "DynIllust", label: "medic" }] },
+    ],
+    models: [],
+    issues: [],
+  };
+  const staticArt = {
+    characters: { char_002_amiya: { Name: "阿米娅", Appellation: "Amiya" } },
+    models: [{ id: "base", groupId: "char_002_amiya", characterId: "char_002_amiya", kind: "StaticE2", label: "精英二立绘", mediaType: "image" }],
+  };
+  const result = mergeStaticArt(dynamic, staticArt);
+  assert.equal(result.groups.length, 1);
+  assert.equal(result.groups[0].id, "char_002_amiya");
+  assert.equal(result.groups[0].name, "阿米娅");
+  assert.deepEqual(result.groups[0].models.map((model) => model.id), ["base", "medic", "guard"]);
+  assert.deepEqual(result.groups[0].models.map((model) => model.outfit), ["精英二", "sale#13", "sale#16"]);
+});

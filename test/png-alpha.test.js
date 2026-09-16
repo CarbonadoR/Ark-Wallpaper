@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
-import { detectPngAlphaMode } from "../server/png-alpha.mjs";
+import { detectPngAlphaMode, inspectPngAlpha, renderTexturePng } from "../server/png-alpha.mjs";
 
 function chunk(type, data) {
   const output = Buffer.alloc(data.length + 12);
@@ -69,5 +69,31 @@ test("tolerates straight-looking outliers in current premultiplied exports", () 
     [255, 128, 0, 128],
   ]));
   assert.equal(detectPngAlphaMode(texture), "pma");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("normalizes invalid transparent RGB in mixed premultiplied exports", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
+  const texture = path.join(root, "mixed.png");
+  const normalized = path.join(root, "normalized.png");
+  fs.writeFileSync(texture, rgbaRowPng([
+    [64, 32, 0, 128],
+    [255, 128, 0, 128],
+    [255, 255, 255, 0],
+  ]));
+  fs.writeFileSync(normalized, renderTexturePng(texture, { alphaMode: "pma" }));
+  assert.deepEqual(inspectPngAlpha(normalized), { partialPixels: 2, straightAlphaPixels: 0, straightRatio: 0 });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("composes a separately exported alpha mask", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
+  const texture = path.join(root, "texture.png");
+  const mask = path.join(root, "texture[alpha].png");
+  const composed = path.join(root, "composed.png");
+  fs.writeFileSync(texture, rgbaPng([200, 100, 50, 255]));
+  fs.writeFileSync(mask, rgbaPng([64, 64, 64, 255]));
+  fs.writeFileSync(composed, renderTexturePng(texture, { alphaPath: mask }));
+  assert.deepEqual(inspectPngAlpha(composed), { partialPixels: 1, straightAlphaPixels: 1, straightRatio: 1 });
   fs.rmSync(root, { recursive: true, force: true });
 });

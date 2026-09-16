@@ -2,6 +2,13 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+// Amiya's class-change resources use IDs that are absent from the exported
+// character table, but they still belong to the canonical Amiya operator.
+const CHARACTER_GROUP_ALIASES = {
+  char_1001_amiya2: "char_002_amiya",
+  char_1037_amiya3: "char_002_amiya",
+};
+
 function readJson(filePath, fallback) {
   if (!filePath || !fs.existsSync(filePath)) return fallback;
   try { return JSON.parse(fs.readFileSync(filePath, "utf8")); } catch { return fallback; }
@@ -131,14 +138,17 @@ export function scanStaticArt({ charpackRoot, skinpackRoot, characterTableFile }
 function characterForGroup(groupId, characters) {
   const candidates = Object.keys(characters).filter((id) => groupId === id || groupId.startsWith(`${id}_`));
   const id = candidates.sort((left, right) => right.length - left.length)[0];
-  return id ? { id, ...characters[id] } : null;
+  if (id) return { id, groupPrefix: id, ...characters[id] };
+  const prefix = Object.keys(CHARACTER_GROUP_ALIASES).find((candidate) => groupId === candidate || groupId.startsWith(`${candidate}_`));
+  const characterId = prefix && CHARACTER_GROUP_ALIASES[prefix];
+  return characterId && characters[characterId] ? { id: characterId, groupPrefix: prefix, ...characters[characterId] } : null;
 }
 
 function outfitForGroup(group, character) {
   if (group.skinName) return group.skinName;
   if (!character) return "动态资源";
-  if (group.id.toLowerCase() === character.id.toLowerCase()) return "默认服装";
-  const suffix = group.id.slice(character.id.length + 1);
+  if (group.id.toLowerCase() === character.groupPrefix.toLowerCase()) return "默认服装";
+  const suffix = group.id.slice(character.groupPrefix.length + 1);
   return suffix === "2" ? "精英二" : suffix || "默认服装";
 }
 

@@ -1,5 +1,5 @@
 import { config } from "../server/config.mjs";
-import { scanResources } from "../server/catalog.mjs";
+import { pageAlphaMode, scanResources } from "../server/catalog.mjs";
 import { mergeStaticArt, scanStaticArt } from "../server/static-art.mjs";
 
 const dynamicIndex = scanResources(config.resourceRoot, config.metadataFile);
@@ -7,11 +7,15 @@ const staticArt = scanStaticArt(config);
 const index = mergeStaticArt(dynamicIndex, staticArt);
 const versions = Object.groupBy(dynamicIndex.models, (model) => model.spineVersion);
 const formats = Object.groupBy(dynamicIndex.models, (model) => model.skeletonFormat);
+const pages = dynamicIndex.models.flatMap((model) => model.pages.map((_page, index) => ({ model, index })));
+const separatedAlphaPages = pages.filter(({ model, index }) => model.pageAlphaPaths?.[index]);
+const premultipliedPages = pages.filter(({ model, index }) => !model.pageAlphaPaths?.[index] && pageAlphaMode(model, index) === "pma");
 console.log(`资源组：${index.groups.length}`);
 console.log(`动态模型：${dynamicIndex.models.length}`);
 console.log(`静态立绘：${staticArt.models.length}`);
 console.log(`骨骼格式：${Object.entries(formats).map(([key, values]) => `${key} ${values.length}`).join(" / ")}`);
 console.log(`Spine 版本：${Object.entries(versions).map(([key, values]) => `${key} ${values.length}`).join(" / ")}`);
+console.log(`纹理透明度：分离遮罩 ${separatedAlphaPages.length} / 混合预乘 ${premultipliedPages.length} / 标准直通 ${pages.length - separatedAlphaPages.length - premultipliedPages.length}`);
 if (dynamicIndex.issues.length) {
   console.error(JSON.stringify(dynamicIndex.issues, null, 2));
   process.exitCode = 1;

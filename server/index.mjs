@@ -3,7 +3,8 @@ import path from "node:path";
 import express from "express";
 import { config } from "./config.mjs";
 import { publicBackgrounds, scanBackgrounds } from "./backgrounds.mjs";
-import { publicCatalog, scanResources, virtualAtlas } from "./catalog.mjs";
+import { pageAlphaMode, publicCatalog, scanResources, virtualAtlas } from "./catalog.mjs";
+import { renderTexturePng } from "./png-alpha.mjs";
 import { mergeStaticArt, scanStaticArt } from "./static-art.mjs";
 
 const app = express();
@@ -62,11 +63,18 @@ app.get("/api/models/:id/skeleton.:format", (request, response) => {
 app.get("/api/models/:id/:texture", (request, response) => {
   const model = findModel(request.params.id);
   if (!model?.atlasPath) return response.status(404).json({ error: "动态模型不存在" });
-  const match = /^texture-(\d+)\.[a-z0-9]+$/i.exec(request.params.texture);
-  const page = match ? model.pages[Number(match[1])] : null;
+  const match = /^texture-(\d+)(?:-[a-f0-9]+)?\.[a-z0-9]+$/i.exec(request.params.texture);
+  const pageIndex = match ? Number(match[1]) : -1;
+  const page = model.pages[pageIndex];
   if (!page) return response.status(404).json({ error: "纹理不存在" });
   response.set("Cache-Control", "public, max-age=31536000, immutable");
-  response.sendFile(path.join(path.dirname(model.atlasPath), page));
+  const colorPath = path.join(path.dirname(model.atlasPath), page);
+  const alphaPath = model.pageAlphaPaths?.[pageIndex];
+  const rendered = path.extname(colorPath).toLowerCase() === ".png"
+    ? renderTexturePng(colorPath, { alphaPath, alphaMode: pageAlphaMode(model, pageIndex) })
+    : null;
+  if (rendered) return response.type("image/png").send(rendered);
+  response.sendFile(colorPath);
 });
 
 if (fs.existsSync(config.distDir)) {

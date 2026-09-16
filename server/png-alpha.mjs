@@ -3,6 +3,8 @@ import zlib from "node:zlib";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const alphaModeCache = new Map();
+const renderedTextureCache = new Map();
+const MAX_RENDERED_TEXTURES = 12;
 // The current art export preserves straight-looking RGB in some translucent
 // pixels even on PMA atlases. Fully straight atlases consistently exceed this
 // ratio, while known PMA atlases remain below it.
@@ -23,8 +25,8 @@ function paeth(left, up, upperLeft) {
   return leftDistance <= upDistance && leftDistance <= upperLeftDistance ? left : upDistance <= upperLeftDistance ? up : upperLeft;
 }
 
-export function inspectPngAlpha(filePath) {
-  const png = fs.readFileSync(filePath);
+function decodeRgbaPng(input) {
+  const png = Buffer.isBuffer(input) ? input : fs.readFileSync(input);
   if (png.length < 33 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) return null;
 
   let offset = 8;
@@ -57,8 +59,7 @@ export function inspectPngAlpha(filePath) {
   let sourceOffset = 0;
   let previous = Buffer.alloc(stride);
   let current = Buffer.alloc(stride);
-  let partialPixels = 0;
-  let straightAlphaPixels = 0;
+  const pixels = Buffer.alloc(width * height * 4);
   for (let y = 0; y < height; y += 1) {
     const filter = packed[sourceOffset++];
     if (filter > 4) return null;
@@ -70,13 +71,70 @@ export function inspectPngAlpha(filePath) {
       const predictor = filter === 1 ? left : filter === 2 ? up : filter === 3 ? Math.floor((left + up) / 2) : filter === 4 ? paeth(left, up, upperLeft) : 0;
       current[x] = (value + predictor) & 0xff;
     }
-    for (let x = 0; x < stride; x += 4) {
-      const alpha = current[x + 3];
-      if (alpha === 0 || alpha === 255) continue;
-      partialPixels += 1;
-      if (Math.max(current[x], current[x + 1], current[x + 2]) > alpha + 2) straightAlphaPixels += 1;
-    }
+    current.copy(pixels, y * stride);
     [previous, current] = [current, previous];
+  }
+
+  return { width, height, pixels };
+}
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const name = Buffer.from(type, "ascii");
+  const output = Buffer.alloc(data.length + 12);
+  output.writeUInt32BE(data.length, 0);
+  name.copy(output, 4);
+  data.copy(output, 8);
+  output.writeUInt32BE(crc32(Buffer.concat([name, data])), data.length + 8);
+  return output;
+}
+
+function encodeRgbaPng({ width, height, pixels }) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 6, 0, 0, 0], 8);
+  const stride = width * 4;
+  const scanlines = Buffer.alloc(height * (stride + 1));
+  for (let y = 0; y < height; y += 1) pixels.copy(scanlines, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", zlib.deflateSync(scanlines)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function fileFingerprint(filePath) {
+  const stat = fs.statSync(filePath);
+  return `${filePath}:${stat.size}:${stat.mtimeMs}`;
+}
+
+function rememberTexture(key, value) {
+  renderedTextureCache.delete(key);
+  renderedTextureCache.set(key, value);
+  while (renderedTextureCache.size > MAX_RENDERED_TEXTURES) renderedTextureCache.delete(renderedTextureCache.keys().next().value);
+  return value;
+}
+
+export function inspectPngAlpha(filePath) {
+  const decoded = decodeRgbaPng(filePath);
+  if (!decoded) return null;
+  let partialPixels = 0;
+  let straightAlphaPixels = 0;
+  for (let index = 0; index < decoded.pixels.length; index += 4) {
+    const alpha = decoded.pixels[index + 3];
+    if (alpha === 0 || alpha === 255) continue;
+    partialPixels += 1;
+    if (Math.max(decoded.pixels[index], decoded.pixels[index + 1], decoded.pixels[index + 2]) > alpha + 2) straightAlphaPixels += 1;
   }
 
   return {
@@ -84,6 +142,35 @@ export function inspectPngAlpha(filePath) {
     straightAlphaPixels,
     straightRatio: partialPixels ? straightAlphaPixels / partialPixels : 1,
   };
+}
+
+export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "straight" } = {}) {
+  if (!alphaPath && alphaMode !== "pma") return null;
+  const key = [fileFingerprint(colorPath), alphaPath ? fileFingerprint(alphaPath) : "", alphaMode].join("|");
+  if (renderedTextureCache.has(key)) return renderedTextureCache.get(key);
+  const color = decodeRgbaPng(colorPath);
+  if (!color) return null;
+
+  if (alphaPath) {
+    const mask = decodeRgbaPng(alphaPath);
+    if (!mask || mask.width !== color.width || mask.height !== color.height) throw new Error("动态纹理与 Alpha 遮罩尺寸不一致");
+    for (let index = 0; index < color.pixels.length; index += 4) color.pixels[index + 3] = mask.pixels[index];
+  } else {
+    for (let index = 0; index < color.pixels.length; index += 4) {
+      const alpha = color.pixels[index + 3];
+      const maximum = Math.max(color.pixels[index], color.pixels[index + 1], color.pixels[index + 2]);
+      if (alpha === 0) {
+        color.pixels[index] = 0;
+        color.pixels[index + 1] = 0;
+        color.pixels[index + 2] = 0;
+      } else if (maximum > alpha + 2) {
+        color.pixels[index] = Math.round(color.pixels[index] * alpha / 255);
+        color.pixels[index + 1] = Math.round(color.pixels[index + 1] * alpha / 255);
+        color.pixels[index + 2] = Math.round(color.pixels[index + 2] * alpha / 255);
+      }
+    }
+  }
+  return rememberTexture(key, encodeRgbaPng(color));
 }
 
 export function detectPngAlphaMode(filePath) {

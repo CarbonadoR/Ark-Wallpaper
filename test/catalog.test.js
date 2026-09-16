@@ -5,6 +5,15 @@ import os from "node:os";
 import path from "node:path";
 import { scanResources, virtualAtlas } from "../server/catalog.mjs";
 
+function pngHeader(width = 2, height = 3) {
+  const result = Buffer.alloc(24);
+  result.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  result.write("IHDR", 12, "ascii");
+  result.writeUInt32BE(width, 16);
+  result.writeUInt32BE(height, 20);
+  return result;
+}
+
 test("scanner pairs differently named skeletons within one resource directory", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-viewer-"));
   const directory = path.join(root, "char_test_2", "DynIllust", "dyn_test");
@@ -51,6 +60,24 @@ test("scanner repairs numbered extraction atlas texture references", () => {
   const result = scanResources(root);
   assert.deepEqual(result.models[0].pages, ["model$0.png"]);
   assert.deepEqual(result.models[0].pageNames, ["model.png"]);
-  assert.match(virtualAtlas(result.models[0]), /^texture-0\.png/m);
+  assert.match(virtualAtlas(result.models[0]), /^texture-0-[a-f0-9]{10}\.png/m);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("scanner pairs separately exported alpha pages and rejects mismatched masks", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-atlas-"));
+  const directory = path.join(root, "char_test_2", "DynPortrait", "dyn_test");
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "model.atlas"), "texture.png\nsize: 2,3\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n");
+  fs.writeFileSync(path.join(directory, "texture.png"), pngHeader());
+  fs.writeFileSync(path.join(directory, "texture[alpha].png"), pngHeader());
+  fs.writeFileSync(path.join(directory, "model.skel"), Buffer.from([0, 4, 51, 46, 56]));
+  const paired = scanResources(root);
+  assert.equal(paired.issues.length, 0);
+  assert.equal(paired.models[0].pageAlphaPaths[0], path.join(directory, "texture[alpha].png"));
+
+  fs.writeFileSync(path.join(directory, "texture[alpha].png"), pngHeader(1, 1));
+  const mismatched = scanResources(root);
+  assert.equal(mismatched.issues.some((issue) => issue.problem === "alpha-size-mismatch"), true);
   fs.rmSync(root, { recursive: true, force: true });
 });

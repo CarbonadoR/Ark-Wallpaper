@@ -5,6 +5,17 @@ import { detectPngAlphaMode } from "./png-alpha.mjs";
 
 const TEXTURE_PATTERN = /\.(?:png|webp|jpe?g)$/i;
 
+function pngDimensions(filePath) {
+  if (!filePath || path.extname(filePath).toLowerCase() !== ".png") return null;
+  try {
+    const header = Buffer.alloc(24);
+    const descriptor = fs.openSync(filePath, "r");
+    try { fs.readSync(descriptor, header, 0, header.length, 0); } finally { fs.closeSync(descriptor); }
+    if (!header.subarray(1, 4).equals(Buffer.from("PNG"))) return null;
+    return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
+  } catch { return null; }
+}
+
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const absolute = path.join(directory, entry.name);
@@ -23,9 +34,22 @@ function atlasPages(atlasPath) {
       const extension = path.extname(atlasName);
       const numberedSibling = /\$\d+$/.test(atlasStem) ? `${atlasStem}${extension}` : null;
       const sourceName = numberedSibling && fs.existsSync(path.join(directory, numberedSibling)) ? numberedSibling : atlasName;
-      return { atlasName, sourceName };
+      const alphaNames = [
+        sourceName.replace(/\.png$/i, "[alpha].png"),
+        sourceName.replace(/\$(\d+)\.png$/i, "[alpha]$$$1.png"),
+      ];
+      const alphaName = alphaNames.find((candidate) => candidate !== sourceName && fs.existsSync(path.join(directory, candidate)));
+      return { atlasName, sourceName, alphaPath: alphaName ? path.join(directory, alphaName) : null };
     })
     .filter(({ sourceName }) => fs.existsSync(path.join(directory, sourceName)));
+}
+
+function assetVersion(...filePaths) {
+  const fingerprint = filePaths.filter(Boolean).map((filePath) => {
+    const stat = fs.statSync(filePath);
+    return `${stat.size}:${stat.mtimeMs}`;
+  }).join("|");
+  return crypto.createHash("sha1").update(fingerprint).digest("hex").slice(0, 10);
 }
 
 function skeletonForAtlas(atlasPath, directoryFiles) {
@@ -79,6 +103,7 @@ export function scanResources(resourceRoot, metadataFile) {
   const metadata = loadMetadata(metadataFile);
   const models = [];
   const issues = [];
+  const referencedAlphaPaths = new Set();
   for (const atlasPath of allFiles.filter((file) => file.endsWith(".atlas")).sort()) {
     const directory = path.dirname(atlasPath);
     const relativeAtlas = path.relative(resourceRoot, atlasPath);
@@ -90,6 +115,14 @@ export function scanResources(resourceRoot, metadataFile) {
     if (!skeletonPath || !pageMappings.length) {
       issues.push({ atlas: relativeAtlas, problem: !skeletonPath ? "missing-skeleton" : "missing-texture" });
       continue;
+    }
+    for (const mapping of pageMappings.filter(({ alphaPath }) => alphaPath)) {
+      referencedAlphaPaths.add(mapping.alphaPath);
+      const colorSize = pngDimensions(path.join(directory, mapping.sourceName));
+      const alphaSize = pngDimensions(mapping.alphaPath);
+      if (!colorSize || !alphaSize || colorSize.width !== alphaSize.width || colorSize.height !== alphaSize.height) {
+        issues.push({ atlas: relativeAtlas, texture: mapping.sourceName, problem: "alpha-size-mismatch" });
+      }
     }
     const id = crypto.createHash("sha1").update(relativeAtlas).digest("hex").slice(0, 16);
     models.push({
@@ -104,7 +137,12 @@ export function scanResources(resourceRoot, metadataFile) {
       spineVersion: readSpineVersion(skeletonPath),
       pages: pageMappings.map(({ sourceName }) => sourceName),
       pageNames: pageMappings.map(({ atlasName }) => atlasName),
+      pageAlphaPaths: pageMappings.map(({ alphaPath }) => alphaPath),
+      pageAssetVersions: pageMappings.map(({ sourceName, alphaPath }) => assetVersion(path.join(directory, sourceName), alphaPath)),
     });
+  }
+  for (const alphaPath of allFiles.filter((file) => /\[alpha\](?:\$\d+)?\.png$/i.test(file))) {
+    if (!referencedAlphaPaths.has(alphaPath)) issues.push({ texture: path.relative(resourceRoot, alphaPath), problem: "orphan-alpha" });
   }
   const byGroup = new Map();
   for (const model of models) {
@@ -160,8 +198,8 @@ export function publicCatalog(index) {
 
 export function virtualAtlas(model) {
   const aliases = new Map((model.pageNames || model.pages).map((page, index) => [page, {
-    name: `texture-${index}${path.extname(model.pages[index]).toLowerCase()}`,
-    alphaMode: model.pageAlphaModes?.[index]
+    name: `texture-${index}${model.pageAssetVersions?.[index] ? `-${model.pageAssetVersions[index]}` : ""}${path.extname(model.pages[index]).toLowerCase()}`,
+    alphaMode: model.pageAlphaPaths?.[index] ? "straight" : model.pageAlphaModes?.[index]
       || (path.extname(model.pages[index]).toLowerCase() === ".png" && fs.existsSync(path.join(path.dirname(model.atlasPath), model.pages[index]))
         ? detectPngAlphaMode(path.join(path.dirname(model.atlasPath), model.pages[index]))
         : "straight"),
@@ -172,4 +210,10 @@ export function virtualAtlas(model) {
     const alias = aliases.get(line.trim());
     return alias ? [alias.name, ...(alias.alphaMode === "pma" ? ["pma: true"] : [])] : [line];
   }).join(newline);
+}
+
+export function pageAlphaMode(model, index) {
+  if (model.pageAlphaPaths?.[index]) return "straight";
+  const pagePath = path.join(path.dirname(model.atlasPath), model.pages[index]);
+  return path.extname(pagePath).toLowerCase() === ".png" ? detectPngAlphaMode(pagePath) : "straight";
 }
