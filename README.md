@@ -19,6 +19,7 @@
 - macOS 多屏桌面壁纸、交互开关、填充模式、位置/缩放和布局锁定
 - macOS 系统色轮选择壁纸背景色，并持久化到下次启动
 - 从 `arts/ui/homebackground` 自动发现主页背景，可选择模糊版或由左右原图拼接的高清版
+- 使用 `arts/ui` 原始界面素材提供可拖动桌面时钟，内置罗德岛、孤星、彩虹六号和火山假日主题
 - 按纹理与资源批次识别直通、预乘及混合 Alpha，并修正无效透明 RGB，避免部件缺失、黑边、白边和半透明雾团
 - 可选本地 metadata 覆盖层，后续可无侵入补充角色名与皮肤名
 
@@ -36,6 +37,7 @@ cp config/runtime.example.json config/runtime.local.json
 {
   "resourceRoot": "../arts/dynchars",
   "backgroundRoot": "../arts/ui/homebackground/wrapper",
+  "uiRoot": "../arts/ui",
   "charpackRoot": "../charpack",
   "skinpackRoot": "../skinpack",
   "characterTableFile": "../chartable"
@@ -77,6 +79,8 @@ npm run macos:run
 ```
 
 在查看器的 Model Inspector 中可找到稳定的 16 位资源 ID，壁纸菜单可用该 ID 切换动态或静态立绘。动态模型 ID 根据 atlas 相对路径生成，静态资源 ID 根据图片相对路径生成；添加角色名元数据不会改变它。
+
+桌面时钟位于“壁纸外观、尺寸与位置”设置中，可开关显示并切换主题。需要调整位置时，先取消“锁定时钟位置”，再从菜单启用壁纸交互，即可直接拖动时钟；松开后坐标会自动保存。锁定时钟后，其区域不会拦截角色点击交互。
 
 壁纸页面同时预留了背景图片和背景 Spine 的分层接口。单图可通过 `backgroundImage` / `bgImage` 传入；高清拼接图可通过 `backgroundImageLeft` 与 `backgroundImageRight` 传入。`backgroundSpine` / `bgSpine` 用于标记背景 Spine 资源 ID；运行时可调用 `window.__setWallpaperBackground({ color, imageUrl, imageUrls, spineId })` 更新背景配置。背景 Spine 当前只创建独立挂载层，待资源接口确定后可直接接入渲染器。
 

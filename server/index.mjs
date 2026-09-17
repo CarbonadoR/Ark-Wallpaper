@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import express from "express";
 import { config } from "./config.mjs";
+import { clockAssets } from "./clock-assets.mjs";
 import { publicBackgrounds, scanBackgrounds } from "./backgrounds.mjs";
 import { pageAlphaMode, publicCatalog, scanResources, virtualAtlas } from "./catalog.mjs";
 import { renderTexturePng } from "./png-alpha.mjs";
@@ -15,6 +16,7 @@ const buildIndex = () => mergeStaticArt(
 );
 let index = buildIndex();
 let backgrounds = scanBackgrounds(config.backgroundRoot);
+const clockAssetPaths = clockAssets(config.uiRoot);
 const findModel = (id) => index.models.find((model) => model.id === id);
 
 app.get("/api/status", (_request, response) => response.json({ ready: true, ...publicCatalog(index).stats, backgrounds: backgrounds.length }));
@@ -37,6 +39,12 @@ app.get("/api/backgrounds/:id/:side", (request, response) => {
   if (!background || !["left", "right"].includes(request.params.side)) return response.status(404).json({ error: "背景不存在" });
   response.set("Cache-Control", "public, max-age=31536000, immutable");
   response.type("image/png").sendFile(request.params.side === "left" ? background.leftPath : background.rightPath);
+});
+app.get("/api/clock/assets/:id", (request, response) => {
+  const filePath = clockAssetPaths[request.params.id];
+  if (!filePath) return response.status(404).json({ error: "时钟主题素材不存在" });
+  response.set("Cache-Control", "public, max-age=31536000, immutable");
+  response.type("image/png").sendFile(filePath);
 });
 app.get("/api/models/:id/model.atlas", (request, response) => {
   const model = findModel(request.params.id);

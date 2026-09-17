@@ -5,6 +5,7 @@ import { Spine, settings as spineSettings } from "pixi-spine";
 import { interactionAnimations, randomInteractionAnimation } from "./interaction.js";
 import { calculateLayout, layoutFromSearch, normalizeLayout } from "./layout.js";
 import { normalizeWallpaperBackground, wallpaperBackgroundFromSearch } from "./wallpaper-background.js";
+import { moveWallpaperClock, normalizeWallpaperClock, wallpaperClockFromSearch } from "./wallpaper-clock.js";
 import "./styles.css";
 
 spineSettings.yDown = false;
@@ -13,6 +14,7 @@ const wallpaperMode = params.get("wallpaper") === "1";
 const requestedModel = params.get("model") || "";
 const initialLayout = layoutFromSearch(params);
 const initialWallpaperBackground = wallpaperBackgroundFromSearch(params);
+const initialWallpaperClock = wallpaperClockFromSearch(params);
 const KIND_LABELS = { StaticE1: "精英一立绘", StaticE2: "精英二立绘", StaticSkin: "皮肤立绘", DynIllust: "动态立绘", DynPortrait: "动态头像", DynIllustStart: "入场动画", BattleFront: "战斗前景", BattleBack: "战斗背景" };
 const KIND_CODES = { StaticE1: "ELITE I", StaticE2: "ELITE II", StaticSkin: "SKIN", DynIllust: "DYNILLUST", DynPortrait: "DYNPORTRAIT", DynIllustStart: "ENTRY", BattleFront: "BATTLE FRONT", BattleBack: "BATTLE BACK" };
 const TYPE_FILTERS = [
@@ -264,6 +266,74 @@ function WallpaperBackground({ settings }) {
   );
 }
 
+const CLOCK_THEME_MARKS = {
+  rhodes: "/api/clock/assets/rhodes-time",
+  lonetrail: "/api/clock/assets/lonetrail-mark",
+  rainbowsix: "/api/clock/assets/rainbowsix-title",
+  volcano: "/api/clock/assets/volcano-title",
+};
+
+function DesktopClock({ settings, onChange }) {
+  const [now, setNow] = useState(() => new Date());
+  const dragRef = useRef(null);
+
+  useEffect(() => {
+    let interval;
+    const schedule = window.setTimeout(() => {
+      setNow(new Date());
+      interval = window.setInterval(() => setNow(new Date()), 1000);
+    }, 1000 - Date.now() % 1000);
+    return () => { window.clearTimeout(schedule); window.clearInterval(interval); };
+  }, []);
+
+  if (!settings.enabled) return null;
+  const time = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+  const date = now.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" });
+
+  const pointerDown = (event) => {
+    if (settings.locked || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: settings.x, y: settings.y, latest: settings };
+  };
+  const pointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = moveWallpaperClock({ ...settings, x: drag.x, y: drag.y }, { deltaX: event.clientX - drag.startX, deltaY: event.clientY - drag.startY, viewportWidth: innerWidth, viewportHeight: innerHeight });
+    drag.latest = next;
+    onChange(next, false);
+  };
+  const pointerUp = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current = null;
+    onChange(drag.latest, true);
+  };
+
+  return <section
+    className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}`}
+    style={{ left: `${settings.x}%`, top: `${settings.y}%` }}
+    onPointerDown={pointerDown}
+    onPointerMove={pointerMove}
+    onPointerUp={pointerUp}
+    onPointerCancel={pointerUp}
+    aria-label={`当前时间 ${time}:${seconds}`}
+  >
+    <div className="clock-accent"></div>
+    <img className="clock-mark" src={CLOCK_THEME_MARKS[settings.theme]} alt="" draggable="false" />
+    <div className="clock-caption"><b>LOCAL TIME</b><span>罗德岛终端 / PRTS</span></div>
+    <div className="clock-time"><strong>{time}</strong><span>{seconds}</span></div>
+    <div className="clock-date">{date}<i>LOCAL</i></div>
+    {!settings.locked && <small className="clock-drag-hint">DRAG TO MOVE</small>}
+  </section>;
+}
+
 function App() {
   const [catalog, setCatalog] = useState(null);
   const [query, setQuery] = useState("");
@@ -278,6 +348,7 @@ function App() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [wallpaperBackground, setWallpaperBackground] = useState(initialWallpaperBackground);
+  const [wallpaperClock, setWallpaperClock] = useState(initialWallpaperClock);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -287,6 +358,21 @@ function App() {
     return () => {
       if (window.__setWallpaperBackground === applyWallpaperBackground) delete window.__setWallpaperBackground;
     };
+  }, []);
+
+  useEffect(() => {
+    if (!wallpaperMode) return undefined;
+    const applyWallpaperClock = (next) => setWallpaperClock((current) => normalizeWallpaperClock({ ...current, ...next }));
+    window.__setWallpaperClock = applyWallpaperClock;
+    return () => {
+      if (window.__setWallpaperClock === applyWallpaperClock) delete window.__setWallpaperClock;
+    };
+  }, []);
+
+  const updateWallpaperClock = useCallback((next, persist) => {
+    const normalized = normalizeWallpaperClock(next);
+    setWallpaperClock(normalized);
+    if (persist) window.webkit?.messageHandlers?.wallpaperClock?.postMessage(normalized);
   }, []);
 
   useEffect(() => {
@@ -387,6 +473,7 @@ function App() {
         </header>}
         {!wallpaperMode && selectedGroup && <nav className="variants"><div className="variant-label"><b>02</b><span>OUTFIT / DISPLAY<small>造型与展示模式</small></span></div>{visibleModels.map((model, index) => <button key={model.id} className={selectedModel?.id === model.id ? "active" : ""} onClick={() => { setSelectedModel(model); setRuntime(null); }} title={`${model.outfit || "未分类"} · ${KIND_LABELS[model.kind] || model.kind}`}><em>{String(index + 1).padStart(2, "0")}</em><span><strong>{model.outfit || KIND_CODES[model.kind] || model.kind.toUpperCase()}</strong><small>{KIND_LABELS[model.kind] || model.kind}</small></span></button>)}</nav>}
         <Stage model={selectedModel} resetSignal={resetSignal} onReady={onReady} onError={onError} />
+        {wallpaperMode && <DesktopClock settings={wallpaperClock} onChange={updateWallpaperClock} />}
         {!wallpaperMode && <div className="viewport-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><span>LIVE VIEW</span></div>}
         {!wallpaperMode && <div className="stage-hint">{selectedModel?.mediaType === "spine" && <><span>CLICK</span> 播放交互 <i></i></>}<span>DRAG</span> 移动画面 <i></i><span>SCROLL</span> 调整缩放 <i></i><span>R</span> 复位</div>}
         {!wallpaperMode && <aside className={`controls ${inspectorOpen ? "open" : ""}`}>

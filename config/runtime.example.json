@@ -3,6 +3,7 @@
   "port": 8791,
   "resourceRoot": "../arts/dynchars",
   "backgroundRoot": "../arts/ui/homebackground/wrapper",
+  "uiRoot": "../arts/ui",
   "charpackRoot": "../charpack",
   "skinpackRoot": "../skinpack",
   "characterTableFile": "../chartable",

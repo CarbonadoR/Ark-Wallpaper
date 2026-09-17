@@ -19,6 +19,7 @@ export const config = {
   port: Number(process.env.ARKNIGHTS_VIEWER_PORT || raw.port || 8791),
   resourceRoot,
   backgroundRoot: path.resolve(process.env.ARKNIGHTS_BACKGROUND_ROOT || (raw.backgroundRoot ? resolveFromConfig(raw.backgroundRoot) : path.join(resourceRoot, "..", "ui", "homebackground", "wrapper"))),
+  uiRoot: path.resolve(process.env.ARKNIGHTS_UI_ROOT || (raw.uiRoot ? resolveFromConfig(raw.uiRoot) : path.join(resourceRoot, "..", "ui"))),
   metadataFile: path.resolve(process.env.ARKNIGHTS_METADATA_FILE || resolveFromConfig(raw.metadataFile || "./metadata.local.json")),
   charpackRoot: optionalPath("ARKNIGHTS_CHARPACK_ROOT", raw.charpackRoot),
   skinpackRoot: optionalPath("ARKNIGHTS_SKINPACK_ROOT", raw.skinpackRoot),

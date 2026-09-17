@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var lockControl: NSButton?
     private var backgroundColorControl: NSColorWell?
     private var backgroundImageControl: NSPopUpButton?
+    private var clockEnabledControl: NSButton?
+    private var clockThemeControl: NSPopUpButton?
+    private var clockLockControl: NSButton?
     private var scaleLabel: NSTextField?
     private var xLabel: NSTextField?
     private var yLabel: NSTextField?
@@ -43,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var backgrounds: [WallpaperBackground] = []
     private let fitKeys = ["contain", "cover", "width", "height", "stretch"]
     private let fitLabels = ["适应屏幕（完整显示）", "覆盖屏幕（自动裁切）", "宽度铺满（裁切上下）", "高度铺满（裁切左右）", "拉伸铺满（非等比）"]
+    private let clockThemeKeys = ["rhodes", "lonetrail", "rainbowsix", "volcano"]
+    private let clockThemeLabels = ["罗德岛终端", "孤星轨道", "彩虹六号终端", "火山假日"]
 
     private var projectRoot: String { Bundle.main.object(forInfoDictionaryKey: "AKProjectRoot") as? String ?? "" }
     private var npmPath: String { Bundle.main.object(forInfoDictionaryKey: "AKNpmPath") as? String ?? "/opt/homebrew/bin/npm" }
@@ -65,6 +70,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     private var backgroundImageID: String { UserDefaults.standard.string(forKey: "backgroundImageID") ?? "" }
     private var backgroundImageURLs: [String] { backgrounds.first(where: { $0.id == backgroundImageID })?.imageUrls ?? [] }
+    private var clockEnabled: Bool { UserDefaults.standard.object(forKey: "clockEnabled") == nil ? true : UserDefaults.standard.bool(forKey: "clockEnabled") }
+    private var clockTheme: String {
+        let value = UserDefaults.standard.string(forKey: "clockTheme") ?? "rhodes"
+        return clockThemeKeys.contains(value) ? value : "rhodes"
+    }
+    private var clockX: Double { UserDefaults.standard.object(forKey: "clockX") == nil ? 82 : UserDefaults.standard.double(forKey: "clockX") }
+    private var clockY: Double { UserDefaults.standard.object(forKey: "clockY") == nil ? 18 : UserDefaults.standard.double(forKey: "clockY") }
+    private var clockLocked: Bool { UserDefaults.standard.object(forKey: "clockLocked") == nil ? true : UserDefaults.standard.bool(forKey: "clockLocked") }
 
     private func color(from hex: String) -> NSColor {
         var value: UInt64 = 0
@@ -161,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     private func wallpaperURL() -> URL {
         var parts = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
-        var items = [URLQueryItem(name: "wallpaper", value: "1"), URLQueryItem(name: "fit", value: fitMode), URLQueryItem(name: "scale", value: String(scale)), URLQueryItem(name: "x", value: String(offsetX)), URLQueryItem(name: "y", value: String(offsetY)), URLQueryItem(name: "locked", value: layoutLocked ? "1" : "0"), URLQueryItem(name: "background", value: backgroundColorHex)]
+        var items = [URLQueryItem(name: "wallpaper", value: "1"), URLQueryItem(name: "fit", value: fitMode), URLQueryItem(name: "scale", value: String(scale)), URLQueryItem(name: "x", value: String(offsetX)), URLQueryItem(name: "y", value: String(offsetY)), URLQueryItem(name: "locked", value: layoutLocked ? "1" : "0"), URLQueryItem(name: "background", value: backgroundColorHex), URLQueryItem(name: "clock", value: clockEnabled ? "1" : "0"), URLQueryItem(name: "clockTheme", value: clockTheme), URLQueryItem(name: "clockX", value: String(clockX)), URLQueryItem(name: "clockY", value: String(clockY)), URLQueryItem(name: "clockLocked", value: clockLocked ? "1" : "0")]
         if backgroundImageURLs.count == 1 {
             items.append(URLQueryItem(name: "backgroundImage", value: backgroundImageURLs[0]))
         } else if backgroundImageURLs.count == 2 {
@@ -177,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.userContentController.add(self, name: "wallpaperTransform")
+        configuration.userContentController.add(self, name: "wallpaperClock")
         let view = WKWebView(frame: frame, configuration: configuration)
         view.setValue(false, forKey: "drawsBackground")
         view.autoresizingMask = [.width, .height]
@@ -199,8 +213,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "wallpaperTransform", let values = message.body as? [String: Any] else { return }
+        guard let values = message.body as? [String: Any] else { return }
         let defaults = UserDefaults.standard
+        if message.name == "wallpaperClock" {
+            if let number = values["x"] as? NSNumber { defaults.set(min(96, max(4, number.doubleValue)), forKey: "clockX") }
+            if let number = values["y"] as? NSNumber { defaults.set(min(94, max(6, number.doubleValue)), forKey: "clockY") }
+            applyClock()
+            return
+        }
+        guard message.name == "wallpaperTransform" else { return }
         if let number = values["scale"] as? NSNumber { let value = min(3, max(0.25, number.doubleValue)); defaults.set(value, forKey: "scale"); scaleControl?.doubleValue = value }
         if let number = values["offsetX"] as? NSNumber { let value = min(100, max(-100, number.doubleValue)); defaults.set(value, forKey: "offsetX"); xControl?.doubleValue = value }
         if let number = values["offsetY"] as? NSNumber { let value = min(100, max(-100, number.doubleValue)); defaults.set(value, forKey: "offsetY"); yControl?.doubleValue = value }
@@ -212,30 +233,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     @objc private func showLayout() {
         if let settingsPanel { NSApp.activate(ignoringOtherApps: true); settingsPanel.makeKeyAndOrderFront(nil); return }
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 480), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 680), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         panel.title = "壁纸外观、尺寸与位置"; panel.isFloatingPanel = true; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false; panel.level = .floating; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.center()
         let content = NSView(frame: panel.contentView?.bounds ?? .zero); panel.contentView = content
-        content.addSubview(label("背景图", NSRect(x: 24, y: 432, width: 110, height: 20)))
-        let backgroundImage = NSPopUpButton(frame: NSRect(x: 145, y: 426, width: 270, height: 28)); backgroundImage.addItem(withTitle: "无（仅背景色）"); backgroundImage.addItems(withTitles: backgrounds.map(\.name)); backgroundImage.selectItem(at: (backgrounds.firstIndex(where: { $0.id == backgroundImageID }).map { $0 + 1 }) ?? 0); backgroundImage.target = self; backgroundImage.action = #selector(backgroundImageChanged); content.addSubview(backgroundImage)
-        content.addSubview(label("背景颜色", NSRect(x: 24, y: 382, width: 110, height: 20)))
-        let backgroundColor = NSColorWell(frame: NSRect(x: 145, y: 376, width: 72, height: 28)); backgroundColor.color = color(from: backgroundColorHex); backgroundColor.target = self; backgroundColor.action = #selector(backgroundColorChanged); backgroundColor.isContinuous = true; content.addSubview(backgroundColor)
+        content.addSubview(label("桌面时钟", NSRect(x: 24, y: 632, width: 120, height: 20)))
+        let clockVisible = NSButton(checkboxWithTitle: "显示桌面时钟", target: self, action: #selector(clockChanged)); clockVisible.frame = NSRect(x: 141, y: 591, width: 276, height: 24); clockVisible.state = clockEnabled ? .on : .off; content.addSubview(clockVisible)
+        content.addSubview(label("时钟主题", NSRect(x: 24, y: 552, width: 110, height: 20)))
+        let clockThemeSelector = NSPopUpButton(frame: NSRect(x: 145, y: 546, width: 270, height: 28)); clockThemeSelector.addItems(withTitles: clockThemeLabels); clockThemeSelector.selectItem(at: clockThemeKeys.firstIndex(of: clockTheme) ?? 0); clockThemeSelector.target = self; clockThemeSelector.action = #selector(clockChanged); content.addSubview(clockThemeSelector)
+        let clockLock = NSButton(checkboxWithTitle: "锁定时钟位置", target: self, action: #selector(clockChanged)); clockLock.frame = NSRect(x: 141, y: 507, width: 276, height: 24); clockLock.state = clockLocked ? .on : .off; content.addSubview(clockLock)
+        let clockHint = label("启用壁纸交互并取消锁定后，可直接拖动时钟；位置会自动保存。", NSRect(x: 24, y: 469, width: 392, height: 30), secondary: true); clockHint.maximumNumberOfLines = 2; content.addSubview(clockHint)
+        content.addSubview(label("壁纸外观", NSRect(x: 24, y: 430, width: 120, height: 20)))
+        content.addSubview(label("背景图", NSRect(x: 24, y: 395, width: 110, height: 20)))
+        let backgroundImage = NSPopUpButton(frame: NSRect(x: 145, y: 389, width: 270, height: 28)); backgroundImage.addItem(withTitle: "无（仅背景色）"); backgroundImage.addItems(withTitles: backgrounds.map(\.name)); backgroundImage.selectItem(at: (backgrounds.firstIndex(where: { $0.id == backgroundImageID }).map { $0 + 1 }) ?? 0); backgroundImage.target = self; backgroundImage.action = #selector(backgroundImageChanged); content.addSubview(backgroundImage)
+        content.addSubview(label("背景颜色", NSRect(x: 24, y: 354, width: 110, height: 20)))
+        let backgroundColor = NSColorWell(frame: NSRect(x: 145, y: 348, width: 72, height: 28)); backgroundColor.color = color(from: backgroundColorHex); backgroundColor.target = self; backgroundColor.action = #selector(backgroundColorChanged); backgroundColor.isContinuous = true; content.addSubview(backgroundColor)
         NSColorPanel.shared.showsAlpha = false
-        content.addSubview(label("填充模式", NSRect(x: 24, y: 326, width: 110, height: 20)))
-        let fit = NSPopUpButton(frame: NSRect(x: 145, y: 320, width: 270, height: 28)); fit.addItems(withTitles: fitLabels); fit.selectItem(at: fitKeys.firstIndex(of: fitMode) ?? 1); fit.target = self; fit.action = #selector(layoutChanged); content.addSubview(fit)
-        content.addSubview(label("缩放", NSRect(x: 24, y: 276, width: 110, height: 20)))
-        let scaleSlider = NSSlider(value: scale, minValue: 0.25, maxValue: 3, target: self, action: #selector(layoutChanged)); scaleSlider.frame = NSRect(x: 145, y: 274, width: 210, height: 24); scaleSlider.isContinuous = true; content.addSubview(scaleSlider)
-        let scaleValue = label("", NSRect(x: 365, y: 276, width: 52, height: 20), secondary: true); scaleValue.alignment = .right; content.addSubview(scaleValue)
-        content.addSubview(label("水平位置", NSRect(x: 24, y: 226, width: 110, height: 20)))
-        let xSlider = NSSlider(value: offsetX, minValue: -100, maxValue: 100, target: self, action: #selector(layoutChanged)); xSlider.frame = NSRect(x: 145, y: 224, width: 210, height: 24); xSlider.isContinuous = true; content.addSubview(xSlider)
-        let xValue = label("", NSRect(x: 365, y: 226, width: 52, height: 20), secondary: true); xValue.alignment = .right; content.addSubview(xValue)
-        content.addSubview(label("垂直位置", NSRect(x: 24, y: 176, width: 110, height: 20)))
-        let ySlider = NSSlider(value: offsetY, minValue: -100, maxValue: 100, target: self, action: #selector(layoutChanged)); ySlider.frame = NSRect(x: 145, y: 174, width: 210, height: 24); ySlider.isContinuous = true; content.addSubview(ySlider)
-        let yValue = label("", NSRect(x: 365, y: 176, width: 52, height: 20), secondary: true); yValue.alignment = .right; content.addSubview(yValue)
-        let lock = NSButton(checkboxWithTitle: "锁定壁纸尺寸与位置（防止交互时误拖动）", target: self, action: #selector(layoutChanged)); lock.frame = NSRect(x: 141, y: 125, width: 276, height: 24); lock.state = layoutLocked ? .on : .off; content.addSubview(lock)
-        let hint = label("解锁后可在交互模式中拖动壁纸或用滚轮缩放；所有调整会自动保存。", NSRect(x: 24, y: 77, width: 392, height: 34), secondary: true); hint.maximumNumberOfLines = 2; content.addSubview(hint)
+        content.addSubview(label("尺寸与位置", NSRect(x: 24, y: 309, width: 120, height: 20)))
+        content.addSubview(label("填充模式", NSRect(x: 24, y: 273, width: 110, height: 20)))
+        let fit = NSPopUpButton(frame: NSRect(x: 145, y: 267, width: 270, height: 28)); fit.addItems(withTitles: fitLabels); fit.selectItem(at: fitKeys.firstIndex(of: fitMode) ?? 1); fit.target = self; fit.action = #selector(layoutChanged); content.addSubview(fit)
+        content.addSubview(label("缩放", NSRect(x: 24, y: 231, width: 110, height: 20)))
+        let scaleSlider = NSSlider(value: scale, minValue: 0.25, maxValue: 3, target: self, action: #selector(layoutChanged)); scaleSlider.frame = NSRect(x: 145, y: 229, width: 210, height: 24); scaleSlider.isContinuous = true; content.addSubview(scaleSlider)
+        let scaleValue = label("", NSRect(x: 365, y: 231, width: 52, height: 20), secondary: true); scaleValue.alignment = .right; content.addSubview(scaleValue)
+        content.addSubview(label("水平位置", NSRect(x: 24, y: 189, width: 110, height: 20)))
+        let xSlider = NSSlider(value: offsetX, minValue: -100, maxValue: 100, target: self, action: #selector(layoutChanged)); xSlider.frame = NSRect(x: 145, y: 187, width: 210, height: 24); xSlider.isContinuous = true; content.addSubview(xSlider)
+        let xValue = label("", NSRect(x: 365, y: 189, width: 52, height: 20), secondary: true); xValue.alignment = .right; content.addSubview(xValue)
+        content.addSubview(label("垂直位置", NSRect(x: 24, y: 147, width: 110, height: 20)))
+        let ySlider = NSSlider(value: offsetY, minValue: -100, maxValue: 100, target: self, action: #selector(layoutChanged)); ySlider.frame = NSRect(x: 145, y: 145, width: 210, height: 24); ySlider.isContinuous = true; content.addSubview(ySlider)
+        let yValue = label("", NSRect(x: 365, y: 147, width: 52, height: 20), secondary: true); yValue.alignment = .right; content.addSubview(yValue)
+        let lock = NSButton(checkboxWithTitle: "锁定壁纸尺寸与位置（防止交互时误拖动）", target: self, action: #selector(layoutChanged)); lock.frame = NSRect(x: 141, y: 105, width: 276, height: 24); lock.state = layoutLocked ? .on : .off; content.addSubview(lock)
+        let hint = label("解锁后可在交互模式中拖动壁纸或用滚轮缩放；所有调整会自动保存。", NSRect(x: 24, y: 66, width: 392, height: 30), secondary: true); hint.maximumNumberOfLines = 2; content.addSubview(hint)
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetLayout)); reset.frame = NSRect(x: 24, y: 22, width: 96, height: 32); content.addSubview(reset)
         let done = NSButton(title: "完成", target: self, action: #selector(closeLayout)); done.keyEquivalent = "\r"; done.frame = NSRect(x: 320, y: 22, width: 96, height: 32); content.addSubview(done)
-        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; backgroundColorControl = backgroundColor; backgroundImageControl = backgroundImage; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
+        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; backgroundColorControl = backgroundColor; backgroundImageControl = backgroundImage; clockEnabledControl = clockVisible; clockThemeControl = clockThemeSelector; clockLockControl = clockLock; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
         NSApp.activate(ignoringOtherApps: true); panel.orderFrontRegardless(); panel.makeKey()
     }
     private func updateLabels() { scaleLabel?.stringValue = String(format: "%.0f%%", (scaleControl?.doubleValue ?? 1) * 100); xLabel?.stringValue = String(format: "%+.0f%%", xControl?.doubleValue ?? 0); yLabel?.stringValue = String(format: "%+.0f%%", yControl?.doubleValue ?? 0) }
@@ -266,7 +295,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let nativeColor = color(from: backgroundColorHex)
         windows.forEach { $0.backgroundColor = nativeColor }
     }
-    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; backgroundColorControl?.color = .black; backgroundImageControl?.selectItem(at: 0); layoutChanged(); backgroundColorChanged(); backgroundImageChanged() }
+    @objc private func clockChanged() {
+        guard let clockEnabledControl, let clockThemeControl, let clockLockControl else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(clockEnabledControl.state == .on, forKey: "clockEnabled")
+        defaults.set(clockThemeKeys[max(0, clockThemeControl.indexOfSelectedItem)], forKey: "clockTheme")
+        defaults.set(clockLockControl.state == .on, forKey: "clockLocked")
+        applyClock()
+    }
+    private func applyClock() {
+        let values: [String: Any] = ["enabled": clockEnabled, "theme": clockTheme, "x": clockX, "y": clockY, "locked": clockLocked]
+        guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
+        webViews.forEach { $0.evaluateJavaScript("window.__setWallpaperClock?.(\(json))") }
+    }
+    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; backgroundColorControl?.color = .black; backgroundImageControl?.selectItem(at: 0); clockEnabledControl?.state = .on; clockThemeControl?.selectItem(at: 0); clockLockControl?.state = .on; UserDefaults.standard.set(82, forKey: "clockX"); UserDefaults.standard.set(18, forKey: "clockY"); layoutChanged(); backgroundColorChanged(); backgroundImageChanged(); clockChanged() }
     @objc private func closeLayout() { settingsPanel?.orderOut(nil) }
 
     @objc private func selectModel() {
