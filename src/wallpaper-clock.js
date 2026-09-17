@@ -29,6 +29,7 @@ export function normalizeWallpaperClock(settings = {}) {
     y: bounded(settings.y, 18, 6, 94),
     locked: boolean(settings.locked, true),
     perspective: perspective(settings.perspective),
+    pointerPerspective: boolean(settings.pointerPerspective, false),
   };
 }
 
@@ -41,7 +42,21 @@ export function wallpaperClockFromSearch(searchParams) {
     y: searchParams.get("clockY"),
     locked: searchParams.get("clockLocked"),
     perspective: searchParams.get("clockPerspective"),
+    pointerPerspective: searchParams.get("clockPointerPerspective"),
   });
+}
+
+export function clockPointerTilt({ pointerX, pointerY, clockX, clockY, viewportWidth, viewportHeight }) {
+  const width = Math.max(1, Number(viewportWidth) || 1);
+  const height = Math.max(1, Number(viewportHeight) || 1);
+  const centerX = width * bounded(clockX, 50, 0, 100) / 100;
+  const centerY = height * bounded(clockY, 50, 0, 100) / 100;
+  const depth = Math.max(width, height) * 1.7;
+  const degrees = 180 / Math.PI;
+  return {
+    rotateX: Math.min(9, Math.max(-9, Math.atan2(centerY - Number(pointerY || 0), depth) * degrees)),
+    rotateY: Math.min(13, Math.max(-13, Math.atan2(Number(pointerX || 0) - centerX, depth) * degrees)),
+  };
 }
 
 export function moveWallpaperClock(settings, { deltaX, deltaY, viewportWidth, viewportHeight }) {

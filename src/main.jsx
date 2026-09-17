@@ -5,7 +5,7 @@ import { Spine, settings as spineSettings } from "pixi-spine";
 import { interactionAnimations, randomInteractionAnimation } from "./interaction.js";
 import { calculateLayout, layoutFromSearch, normalizeLayout } from "./layout.js";
 import { normalizeWallpaperBackground, wallpaperBackgroundFromSearch } from "./wallpaper-background.js";
-import { moveWallpaperClock, normalizeWallpaperClock, wallpaperClockFromSearch } from "./wallpaper-clock.js";
+import { clockPointerTilt, moveWallpaperClock, normalizeWallpaperClock, wallpaperClockFromSearch } from "./wallpaper-clock.js";
 import "./styles.css";
 
 spineSettings.yDown = false;
@@ -276,6 +276,9 @@ const CLOCK_THEME_MARKS = {
 function DesktopClock({ settings, onChange }) {
   const [now, setNow] = useState(() => new Date());
   const dragRef = useRef(null);
+  const clockRef = useRef(null);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   useEffect(() => {
     let interval;
@@ -285,6 +288,60 @@ function DesktopClock({ settings, onChange }) {
     }, 1000 - Date.now() % 1000);
     return () => { window.clearTimeout(schedule); window.clearInterval(interval); };
   }, []);
+
+  useEffect(() => {
+    if (!settings.enabled || !settings.pointerPerspective) return undefined;
+    const motion = { x: 0, y: 0, targetX: 0, targetY: 0, frame: 0, previousTime: performance.now() };
+    const draw = (time) => {
+      const elapsed = Math.min(64, Math.max(0, time - motion.previousTime));
+      motion.previousTime = time;
+      const blend = 1 - Math.exp(-elapsed / 85);
+      motion.x += (motion.targetX - motion.x) * blend;
+      motion.y += (motion.targetY - motion.y) * blend;
+      const element = clockRef.current;
+      if (element) {
+        element.style.setProperty("--clock-pointer-rotate-x", `${motion.x.toFixed(3)}deg`);
+        element.style.setProperty("--clock-pointer-rotate-y", `${motion.y.toFixed(3)}deg`);
+      }
+      if (Math.abs(motion.targetX - motion.x) > 0.01 || Math.abs(motion.targetY - motion.y) > 0.01) {
+        motion.frame = requestAnimationFrame(draw);
+      } else {
+        motion.x = motion.targetX;
+        motion.y = motion.targetY;
+        motion.frame = 0;
+      }
+    };
+    const setTarget = (rotateX, rotateY) => {
+      motion.targetX = rotateX;
+      motion.targetY = rotateY;
+      if (!motion.frame) {
+        motion.previousTime = performance.now();
+        motion.frame = requestAnimationFrame(draw);
+      }
+    };
+    const aimAt = ({ x, y, active = true }) => {
+      if (!active) { setTarget(0, 0); return; }
+      const current = settingsRef.current;
+      const tilt = clockPointerTilt({ pointerX: x, pointerY: y, clockX: current.x, clockY: current.y, viewportWidth: innerWidth, viewportHeight: innerHeight });
+      setTarget(tilt.rotateX, tilt.rotateY);
+    };
+    const pointerMove = (event) => aimAt({ x: event.clientX, y: event.clientY });
+    const pointerLeave = (event) => { if (!event.relatedTarget) aimAt({ active: false }); };
+    const blur = () => aimAt({ active: false });
+    window.addEventListener("pointermove", pointerMove, { passive: true, capture: true });
+    window.addEventListener("mouseout", pointerLeave, { passive: true });
+    window.addEventListener("blur", blur);
+    window.__setWallpaperClockPointer = aimAt;
+    return () => {
+      window.removeEventListener("pointermove", pointerMove, { capture: true });
+      window.removeEventListener("mouseout", pointerLeave);
+      window.removeEventListener("blur", blur);
+      if (window.__setWallpaperClockPointer === aimAt) delete window.__setWallpaperClockPointer;
+      if (motion.frame) cancelAnimationFrame(motion.frame);
+      clockRef.current?.style.removeProperty("--clock-pointer-rotate-x");
+      clockRef.current?.style.removeProperty("--clock-pointer-rotate-y");
+    };
+  }, [settings.enabled, settings.pointerPerspective]);
 
   if (!settings.enabled) return null;
   const time = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -318,7 +375,8 @@ function DesktopClock({ settings, onChange }) {
   };
 
   return <section
-    className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}${settings.perspective !== "none" ? ` perspective-${settings.perspective}` : ""}`}
+    ref={clockRef}
+    className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}${settings.perspective !== "none" ? ` perspective-${settings.perspective}` : ""}${settings.pointerPerspective ? " pointer-perspective" : ""}`}
     style={{ left: `${settings.x}%`, top: `${settings.y}%`, "--clock-scale": settings.scale }}
     onPointerDown={pointerDown}
     onPointerMove={pointerMove}
