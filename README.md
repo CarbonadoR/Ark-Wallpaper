@@ -148,4 +148,4 @@ git status --short
 
 ## 许可证
 
-本仓库中的原创源代码以 [Apache License 2.0](LICENSE) 许可。该许可证仅适用于本项目原创代码，不适用于用户自行放入 `arts`、`charpack`、`chartable`、`skinpack` 的第三方或游戏资源，也不授予任何游戏知识产权的许可。
+本仓库中的原创源代码以 [PolyForm Noncommercial License 1.0.0](LICENSE) 许可。该许可证仅适用于本项目原创代码，不适用于用户自行放入 `arts`、`charpack`、`chartable`、`skinpack` 的第三方或游戏资源，也不授予任何游戏知识产权的许可。
