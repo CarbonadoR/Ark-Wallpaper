@@ -19,11 +19,12 @@ private struct WallpaperBackgroundCatalog: Decodable {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem!
     private var statusLabel: NSMenuItem!
     private var interactionItem: NSMenuItem!
     private var pauseItem: NSMenuItem!
+    private var diagnosticItem: NSMenuItem!
     private var settingsPanel: NSPanel?
     private var fitControl: NSPopUpButton?
     private var scaleControl: NSSlider?
@@ -46,6 +47,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var serverProcess: Process?
     private var interactionEnabled = false
     private var paused = false
+    private var diagnosticsEnabled = UserDefaults.standard.bool(forKey: "diagnosticsEnabled")
+    private var workspaceDiagnosticsRegistered = false
+    private var lastScreenSignature = ""
+    private var diagnosticWebViews: Set<ObjectIdentifier> = []
+    private var webViewLabels: [ObjectIdentifier: String] = [:]
+    private var pendingNavigationReasons: [ObjectIdentifier: String] = [:]
     private var backgrounds: [WallpaperBackground] = []
     private let fitKeys = ["contain", "cover", "width", "height", "stretch"]
     private let fitLabels = ["适应屏幕（完整显示）", "覆盖屏幕（自动裁切）", "宽度铺满（裁切上下）", "高度铺满（裁切左右）", "拉伸铺满（非等比）"]
@@ -108,22 +115,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         return String(format: "#%02X%02X%02X", Int(round(rgb.redComponent * 255)), Int(round(rgb.greenComponent * 255)), Int(round(rgb.blueComponent * 255)))
     }
 
+    private func diagnose(_ event: String, _ fields: [String: String] = [:]) {
+        guard diagnosticsEnabled else { return }
+        DiagnosticLog.shared.record(event, fields: fields)
+    }
+
+    private func displayID(for screen: NSScreen) -> UInt32 {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+    }
+
+    private func screenSignature() -> String {
+        NSScreen.screens.map { screen in
+            let frame = screen.frame
+            return String(format: "%u:%.0f,%.0f,%.0fx%.0f@%.2f", displayID(for: screen), frame.origin.x, frame.origin.y, frame.width, frame.height, screen.backingScaleFactor)
+        }.sorted().joined(separator: ";")
+    }
+
+    private func setWorkspaceDiagnosticsEnabled(_ enabled: Bool) {
+        guard enabled != workspaceDiagnosticsRegistered else { return }
+        let center = NSWorkspace.shared.notificationCenter
+        let names: [Notification.Name] = [
+            NSWorkspace.activeSpaceDidChangeNotification,
+            NSWorkspace.didActivateApplicationNotification,
+            NSWorkspace.didWakeNotification,
+            NSWorkspace.willSleepNotification,
+            NSWorkspace.sessionDidBecomeActiveNotification,
+            NSWorkspace.sessionDidResignActiveNotification,
+        ]
+        if enabled {
+            names.forEach { center.addObserver(self, selector: #selector(workspaceEvent(_:)), name: $0, object: nil) }
+        } else {
+            names.forEach { center.removeObserver(self, name: $0, object: nil) }
+        }
+        workspaceDiagnosticsRegistered = enabled
+    }
+
+    @objc private func workspaceEvent(_ notification: Notification) {
+        diagnose("workspace.notification", ["name": notification.name.rawValue])
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        DiagnosticLog.shared.setEnabled(diagnosticsEnabled)
         configureMenu()
+        setWorkspaceDiagnosticsEnabled(diagnosticsEnabled)
+        diagnose("app.launch", ["diagnostics": diagnosticsEnabled ? "on" : "off", "screens": screenSignature()])
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         Task {
-            if !(await serverReady()) { launchServer(); guard await waitForServer() else { showStartupError(); return } }
+            if !(await serverReady()) {
+                diagnose("server.unavailable-at-launch")
+                launchServer()
+                guard await waitForServer() else { diagnose("server.start-timeout"); showStartupError(); return }
+            } else {
+                diagnose("server.reused")
+            }
             await loadBackgrounds()
             statusLabel.title = modelID.isEmpty ? "运行中 · 自动选择首个模型" : "运行中 · \(modelID)"
-            rebuildWindows()
+            rebuildWindows(reason: "startup")
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        diagnose("app.will-terminate")
+        DiagnosticLog.shared.flush()
         NotificationCenter.default.removeObserver(self)
+        setWorkspaceDiagnosticsEnabled(false)
         if serverProcess?.isRunning == true { serverProcess?.terminate() }
     }
+
+    func applicationDidBecomeActive(_ notification: Notification) { diagnose("app.did-become-active") }
+    func applicationDidResignActive(_ notification: Notification) { diagnose("app.did-resign-active") }
+    func applicationDidHide(_ notification: Notification) { diagnose("app.did-hide") }
+    func applicationDidUnhide(_ notification: Notification) { diagnose("app.did-unhide") }
 
     private func configureMenu() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -144,6 +207,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "打开完整查看器", action: #selector(openViewer), keyEquivalent: "o"))
         menu.addItem(NSMenuItem(title: "在访达中显示工程", action: #selector(showProject), keyEquivalent: "f"))
+        diagnosticItem = NSMenuItem(title: diagnosticsEnabled ? "关闭诊断模式" : "启用诊断模式", action: #selector(toggleDiagnostics), keyEquivalent: "d")
+        diagnosticItem.state = diagnosticsEnabled ? .on : .off
+        menu.addItem(diagnosticItem)
+        menu.addItem(NSMenuItem(title: "打开诊断日志", action: #selector(openDiagnosticLog), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q"))
         for item in menu.items where item.action != nil { item.target = self }
@@ -151,7 +218,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     private func launchServer() {
-        guard !projectRoot.isEmpty else { return }
+        guard !projectRoot.isEmpty else { diagnose("server.launch-skipped", ["reason": "missing-project-root"]); return }
+        diagnose("server.launch-requested")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: npmPath)
         process.arguments = ["run", "start"]
@@ -162,7 +230,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         process.environment = environment
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        do { try process.run(); serverProcess = process } catch { statusLabel.title = "服务启动失败" }
+        process.terminationHandler = { process in
+            DiagnosticLog.shared.record("server.exited", fields: [
+                "reason": process.terminationReason == .exit ? "exit" : "signal",
+                "status": String(process.terminationStatus),
+            ])
+        }
+        do {
+            try process.run()
+            serverProcess = process
+            diagnose("server.launched", ["pid": String(process.processIdentifier)])
+        } catch {
+            statusLabel.title = "服务启动失败"
+            let value = error as NSError
+            diagnose("server.launch-failed", ["domain": value.domain, "code": String(value.code)])
+        }
     }
 
     private func serverReady() async -> Bool {
@@ -178,10 +260,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         var request = URLRequest(url: serverURL.appendingPathComponent("api/backgrounds")); request.timeoutInterval = 3
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { backgrounds = []; return }
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { backgrounds = []; diagnose("backgrounds.load-failed", ["reason": "http-status"]); return }
             backgrounds = try JSONDecoder().decode(WallpaperBackgroundCatalog.self, from: data).backgrounds
+            diagnose("backgrounds.loaded", ["count": String(backgrounds.count)])
         } catch {
             backgrounds = []
+            let value = error as NSError
+            diagnose("backgrounds.load-failed", ["domain": value.domain, "code": String(value.code)])
         }
     }
 
@@ -199,7 +284,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         return parts.url!
     }
     private func desktopLevel() -> NSWindow.Level { NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1) }
-    private func makeWebView(frame: NSRect) -> WKWebView {
+
+    private func attachDiagnostics(to view: WKWebView) {
+        let identifier = ObjectIdentifier(view)
+        guard diagnosticsEnabled, diagnosticWebViews.insert(identifier).inserted else { return }
+        let controller = view.configuration.userContentController
+        controller.add(self, name: "wallpaperDiagnostics")
+        controller.addUserScript(WKUserScript(source: WallpaperPageDiagnostics.script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        view.navigationDelegate = self
+        if view.url != nil {
+            view.evaluateJavaScript(WallpaperPageDiagnostics.script) { _, error in
+                guard let error else { return }
+                let value = error as NSError
+                DiagnosticLog.shared.record("diagnostics.script-injection-failed", fields: ["domain": value.domain, "code": String(value.code)])
+            }
+        }
+    }
+
+    private func detachDiagnostics(from view: WKWebView) {
+        let identifier = ObjectIdentifier(view)
+        guard diagnosticWebViews.remove(identifier) != nil else { return }
+        let controller = view.configuration.userContentController
+        view.evaluateJavaScript("window.__arkWallpaperDiagnosticsCleanup?.()")
+        controller.removeScriptMessageHandler(forName: "wallpaperDiagnostics")
+        controller.removeAllUserScripts()
+        view.navigationDelegate = nil
+    }
+
+    private func makeWebView(frame: NSRect, label: String, reason: String) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.userContentController.add(self, name: "wallpaperTransform")
@@ -207,26 +319,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let view = WKWebView(frame: frame, configuration: configuration)
         view.setValue(false, forKey: "drawsBackground")
         view.autoresizingMask = [.width, .height]
+        let identifier = ObjectIdentifier(view)
+        webViewLabels[identifier] = label
+        pendingNavigationReasons[identifier] = reason
+        attachDiagnostics(to: view)
+        diagnose("webview.created", ["view": label, "reason": reason])
         view.load(URLRequest(url: wallpaperURL()))
         return view
     }
-    private func rebuildWindows() {
-        windows.forEach { $0.close() }; windows.removeAll(); webViews.removeAll()
+
+    private func rebuildWindows(reason: String) {
+        let signature = screenSignature()
+        diagnose("windows.rebuild-begin", ["reason": reason, "old-count": String(windows.count), "screens": signature])
+        windows.forEach { $0.close() }
+        windows.removeAll()
+        webViews.forEach { detachDiagnostics(from: $0) }
+        webViews.removeAll()
+        diagnosticWebViews.removeAll()
+        webViewLabels.removeAll()
+        pendingNavigationReasons.removeAll()
         for screen in NSScreen.screens {
+            let label = "display-\(displayID(for: screen))"
             let window = WallpaperWindow(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false, screen: screen)
             window.setFrame(screen.frame, display: true)
             window.level = interactionEnabled ? .normal : desktopLevel()
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
             window.backgroundColor = color(from: backgroundColorHex); window.isOpaque = true; window.hasShadow = false
             window.ignoresMouseEvents = !interactionEnabled; window.acceptsMouseMovedEvents = interactionEnabled; window.isReleasedWhenClosed = false
-            let view = makeWebView(frame: NSRect(origin: .zero, size: screen.frame.size)); window.contentView = view
+            window.delegate = diagnosticsEnabled ? self : nil
+            let view = makeWebView(frame: NSRect(origin: .zero, size: screen.frame.size), label: label, reason: "window-rebuild:\(reason)"); window.contentView = view
             if !paused { window.orderFrontRegardless() }
             windows.append(window); webViews.append(view)
         }
+        lastScreenSignature = signature
+        diagnose("windows.rebuild-end", ["reason": reason, "new-count": String(windows.count)])
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let values = message.body as? [String: Any] else { return }
+        if message.name == "wallpaperDiagnostics" {
+            guard diagnosticsEnabled, let event = values["event"] as? String, WallpaperPageDiagnostics.allowedEvents.contains(event) else { return }
+            var fields: [String: String] = ["view": message.webView.map { webViewLabels[ObjectIdentifier($0)] ?? "unknown" } ?? "unknown"]
+            for key in ["navigationType", "visibility", "persisted", "prevented"] {
+                if let value = values[key] { fields[key] = String(describing: value) }
+            }
+            diagnose("page.\(event)", fields)
+            return
+        }
         let defaults = UserDefaults.standard
         if message.name == "wallpaperClock" {
             if let number = values["x"] as? NSNumber { defaults.set(min(96, max(4, number.doubleValue)), forKey: "clockX") }
@@ -239,6 +378,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if let number = values["offsetX"] as? NSNumber { let value = min(100, max(-100, number.doubleValue)); defaults.set(value, forKey: "offsetX"); xControl?.doubleValue = value }
         if let number = values["offsetY"] as? NSNumber { let value = min(100, max(-100, number.doubleValue)); defaults.set(value, forKey: "offsetY"); yControl?.doubleValue = value }
         updateLabels()
+    }
+
+    private func label(for webView: WKWebView) -> String {
+        webViewLabels[ObjectIdentifier(webView)] ?? "unknown"
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        let identifier = ObjectIdentifier(webView)
+        let reason = pendingNavigationReasons.removeValue(forKey: identifier) ?? "external-or-webkit"
+        diagnose("navigation.started", ["view": label(for: webView), "reason": reason])
+    }
+
+    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        diagnose("navigation.redirected", ["view": label(for: webView)])
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        diagnose("navigation.committed", ["view": label(for: webView)])
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        diagnose("navigation.finished", ["view": label(for: webView)])
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        let value = error as NSError
+        diagnose("navigation.provisional-failed", ["view": label(for: webView), "domain": value.domain, "code": String(value.code)])
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        let value = error as NSError
+        diagnose("navigation.failed", ["view": label(for: webView), "domain": value.domain, "code": String(value.code)])
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        diagnose("webview.content-process-terminated", ["view": label(for: webView)])
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) { diagnoseWindow("window.did-become-key", notification) }
+    func windowDidResignKey(_ notification: Notification) { diagnoseWindow("window.did-resign-key", notification) }
+    func windowDidChangeScreen(_ notification: Notification) { diagnoseWindow("window.did-change-screen", notification) }
+    func windowDidChangeOcclusionState(_ notification: Notification) { diagnoseWindow("window.occlusion-changed", notification) }
+    func windowWillClose(_ notification: Notification) { diagnoseWindow("window.will-close", notification) }
+
+    private func diagnoseWindow(_ event: String, _ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        diagnose(event, [
+            "number": String(window.windowNumber),
+            "occlusion": String(window.occlusionState.rawValue),
+            "visible": window.isVisible ? "true" : "false",
+        ])
     }
 
     private func label(_ text: String, _ frame: NSRect, secondary: Bool = false) -> NSTextField {
@@ -337,13 +527,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let value = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value.isEmpty || value.range(of: "^[0-9a-f]{16}$", options: .regularExpression) != nil else { NSSound.beep(); return }
-        UserDefaults.standard.set(value, forKey: "modelID"); statusLabel.title = value.isEmpty ? "运行中 · 自动选择首个模型" : "运行中 · \(value)"; reloadViews()
+        UserDefaults.standard.set(value, forKey: "modelID"); statusLabel.title = value.isEmpty ? "运行中 · 自动选择首个模型" : "运行中 · \(value)"; reloadViews(reason: "model-selection")
     }
-    private func reloadViews() { let request = URLRequest(url: wallpaperURL(), cachePolicy: .reloadIgnoringLocalCacheData); webViews.forEach { $0.load(request) } }
-    @objc private func reload() { Task { if !(await serverReady()) { launchServer(); _ = await waitForServer() }; if windows.isEmpty { rebuildWindows() } else { reloadViews() } } }
-    @objc private func screensChanged() { rebuildWindows() }
-    @objc private func toggleInteraction() { interactionEnabled.toggle(); interactionItem.state = interactionEnabled ? .on : .off; interactionItem.title = interactionEnabled ? "结束壁纸交互" : "启用壁纸交互"; for window in windows { window.ignoresMouseEvents = !interactionEnabled; window.acceptsMouseMovedEvents = interactionEnabled; window.level = interactionEnabled ? .normal : desktopLevel(); if interactionEnabled { window.makeKeyAndOrderFront(nil) } else { window.orderFrontRegardless() } }; if interactionEnabled { NSApp.activate(ignoringOtherApps: true) } }
-    @objc private func togglePause() { paused.toggle(); pauseItem.state = paused ? .on : .off; pauseItem.title = paused ? "继续壁纸" : "暂停壁纸"; if paused { windows.forEach { $0.orderOut(nil) } } else { windows.forEach { $0.orderFrontRegardless() } } }
+    private func reloadViews(reason: String) {
+        diagnose("views.reload-requested", ["reason": reason, "count": String(webViews.count)])
+        let request = URLRequest(url: wallpaperURL(), cachePolicy: .reloadIgnoringLocalCacheData)
+        webViews.forEach {
+            pendingNavigationReasons[ObjectIdentifier($0)] = reason
+            $0.load(request)
+        }
+    }
+    @objc private func reload() {
+        diagnose("menu.reload-selected")
+        Task {
+            if !(await serverReady()) { launchServer(); _ = await waitForServer() }
+            if windows.isEmpty { rebuildWindows(reason: "manual-reload-empty") } else { reloadViews(reason: "manual-menu") }
+        }
+    }
+    @objc private func screensChanged() {
+        let current = screenSignature()
+        diagnose("screens.parameters-notification", ["before": lastScreenSignature, "after": current])
+        guard lastScreenSignature.isEmpty || current != lastScreenSignature else {
+            diagnose("screens.rebuild-skipped", ["reason": "unchanged-signature"])
+            return
+        }
+        rebuildWindows(reason: "screen-parameters-changed")
+    }
+    @objc private func toggleInteraction() {
+        interactionEnabled.toggle()
+        diagnose("interaction.changed", ["enabled": interactionEnabled ? "true" : "false"])
+        interactionItem.state = interactionEnabled ? .on : .off
+        interactionItem.title = interactionEnabled ? "结束壁纸交互" : "启用壁纸交互"
+        for window in windows {
+            window.ignoresMouseEvents = !interactionEnabled
+            window.acceptsMouseMovedEvents = interactionEnabled
+            window.level = interactionEnabled ? .normal : desktopLevel()
+            if interactionEnabled { window.makeKeyAndOrderFront(nil) } else { window.orderFrontRegardless() }
+        }
+        if interactionEnabled { NSApp.activate(ignoringOtherApps: true) }
+    }
+    @objc private func togglePause() {
+        paused.toggle()
+        diagnose("pause.changed", ["paused": paused ? "true" : "false"])
+        pauseItem.state = paused ? .on : .off
+        pauseItem.title = paused ? "继续壁纸" : "暂停壁纸"
+        if paused { windows.forEach { $0.orderOut(nil) } } else { windows.forEach { $0.orderFrontRegardless() } }
+    }
+    @objc private func toggleDiagnostics() {
+        diagnosticsEnabled.toggle()
+        UserDefaults.standard.set(diagnosticsEnabled, forKey: "diagnosticsEnabled")
+        if diagnosticsEnabled {
+            DiagnosticLog.shared.setEnabled(true)
+            setWorkspaceDiagnosticsEnabled(true)
+            windows.forEach { $0.delegate = self }
+            webViews.forEach { attachDiagnostics(to: $0) }
+            diagnose("diagnostics.enabled", ["screens": screenSignature(), "views": String(webViews.count)])
+        } else {
+            diagnose("diagnostics.disabled")
+            setWorkspaceDiagnosticsEnabled(false)
+            windows.forEach { $0.delegate = nil }
+            webViews.forEach { detachDiagnostics(from: $0) }
+            DiagnosticLog.shared.flush()
+            DiagnosticLog.shared.setEnabled(false)
+        }
+        diagnosticItem.state = diagnosticsEnabled ? .on : .off
+        diagnosticItem.title = diagnosticsEnabled ? "关闭诊断模式" : "启用诊断模式"
+    }
+    @objc private func openDiagnosticLog() {
+        let url = DiagnosticLog.shared.fileURL
+        DiagnosticLog.shared.flush()
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = "尚无诊断日志"
+            alert.informativeText = "请先启用诊断模式并复现问题。诊断模式默认关闭。"
+            alert.runModal()
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
     @objc private func openViewer() { NSWorkspace.shared.open(serverURL) }
     @objc private func showProject() { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: projectRoot, isDirectory: true)]) }
     @objc private func showStartupError() { statusLabel.title = "无法启动本地服务"; NSApp.activate(ignoringOtherApps: true); let alert = NSAlert(); alert.messageText = "无法启动 Arknights 本地查看器"; alert.informativeText = "请确认工程目录和 runtime.local.json 中的资源路径有效。"; alert.alertStyle = .critical; alert.runModal() }
