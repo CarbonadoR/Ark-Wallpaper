@@ -342,15 +342,15 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
   color: #f7fbfc;
   background: linear-gradient(112deg, rgba(4, 9, 12, .91), rgba(8, 14, 17, .66));
   box-shadow: 0 16px 46px rgba(0, 0, 0, .34), inset 0 0 0 1px rgba(255, 255, 255, .035);
-  transform: translate(-50%, -50%);
-  transform-origin: 72% 52%;
+  transform: translate(-50%, -50%) scale(var(--clock-scale, 1));
+  transform-origin: 50% 50%;
   backdrop-filter: blur(12px);
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
 }
-.desktop-clock.perspective-left { transform: translate(-50%, -50%) perspective(920px) rotateX(2.5deg) rotateY(-10deg) rotateZ(-1deg); filter: drop-shadow(20px 18px 12px rgba(0, 0, 0, .28)); }
-.desktop-clock.perspective-right { transform: translate(-50%, -50%) perspective(920px) rotateX(2.5deg) rotateY(10deg) rotateZ(1deg); filter: drop-shadow(-20px 18px 12px rgba(0, 0, 0, .28)); }
+.desktop-clock.perspective-left { transform: translate(-50%, -50%) perspective(920px) rotateX(2.5deg) rotateY(-10deg) rotateZ(-1deg) scale(var(--clock-scale, 1)); transform-origin: 72% 52%; filter: drop-shadow(20px 18px 12px rgba(0, 0, 0, .28)); }
+.desktop-clock.perspective-right { transform: translate(-50%, -50%) perspective(920px) rotateX(2.5deg) rotateY(10deg) rotateZ(1deg) scale(var(--clock-scale, 1)); transform-origin: 28% 52%; filter: drop-shadow(-20px 18px 12px rgba(0, 0, 0, .28)); }
 .desktop-clock::before { content: ""; position: absolute; inset: 0; opacity: .13; background: url("/api/clock/assets/rhodes-pattern") center / 64px repeat; pointer-events: none; }
 .desktop-clock::after { content: ""; position: absolute; right: -1px; top: -1px; width: 58px; height: 4px; background: var(--clock-accent); box-shadow: 0 0 14px rgba(var(--clock-accent-rgb), .6); pointer-events: none; }
 .desktop-clock.locked { pointer-events: none; }

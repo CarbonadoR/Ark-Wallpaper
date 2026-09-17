@@ -24,6 +24,7 @@ export function normalizeWallpaperClock(settings = {}) {
   return {
     enabled: boolean(settings.enabled, true),
     theme: CLOCK_THEME_IDS.includes(theme) ? theme : "rhodes",
+    scale: bounded(settings.scale, 1, 0.5, 2),
     x: bounded(settings.x, 82, 4, 96),
     y: bounded(settings.y, 18, 6, 94),
     locked: boolean(settings.locked, true),
@@ -35,6 +36,7 @@ export function wallpaperClockFromSearch(searchParams) {
   return normalizeWallpaperClock({
     enabled: searchParams.get("clock"),
     theme: searchParams.get("clockTheme"),
+    scale: searchParams.get("clockScale"),
     x: searchParams.get("clockX"),
     y: searchParams.get("clockY"),
     locked: searchParams.get("clockLocked"),

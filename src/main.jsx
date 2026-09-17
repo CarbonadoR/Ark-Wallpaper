@@ -319,7 +319,7 @@ function DesktopClock({ settings, onChange }) {
 
   return <section
     className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}${settings.perspective !== "none" ? ` perspective-${settings.perspective}` : ""}`}
-    style={{ left: `${settings.x}%`, top: `${settings.y}%` }}
+    style={{ left: `${settings.x}%`, top: `${settings.y}%`, "--clock-scale": settings.scale }}
     onPointerDown={pointerDown}
     onPointerMove={pointerMove}
     onPointerUp={pointerUp}

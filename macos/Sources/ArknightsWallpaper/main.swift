@@ -34,8 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var backgroundImageControl: NSPopUpButton?
     private var clockEnabledControl: NSButton?
     private var clockThemeControl: NSPopUpButton?
+    private var clockScaleControl: NSSlider?
     private var clockLockControl: NSButton?
     private var clockPerspectiveControl: NSPopUpButton?
+    private var clockScaleLabel: NSTextField?
     private var scaleLabel: NSTextField?
     private var xLabel: NSTextField?
     private var yLabel: NSTextField?
@@ -77,6 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private var clockTheme: String {
         let value = UserDefaults.standard.string(forKey: "clockTheme") ?? "rhodes"
         return clockThemeKeys.contains(value) ? value : "rhodes"
+    }
+    private var clockScale: Double {
+        let value = UserDefaults.standard.object(forKey: "clockScale") == nil ? 1 : UserDefaults.standard.double(forKey: "clockScale")
+        return min(2, max(0.5, value))
     }
     private var clockX: Double { UserDefaults.standard.object(forKey: "clockX") == nil ? 82 : UserDefaults.standard.double(forKey: "clockX") }
     private var clockY: Double { UserDefaults.standard.object(forKey: "clockY") == nil ? 18 : UserDefaults.standard.double(forKey: "clockY") }
@@ -181,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     private func wallpaperURL() -> URL {
         var parts = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
-        var items = [URLQueryItem(name: "wallpaper", value: "1"), URLQueryItem(name: "fit", value: fitMode), URLQueryItem(name: "scale", value: String(scale)), URLQueryItem(name: "x", value: String(offsetX)), URLQueryItem(name: "y", value: String(offsetY)), URLQueryItem(name: "locked", value: layoutLocked ? "1" : "0"), URLQueryItem(name: "background", value: backgroundColorHex), URLQueryItem(name: "clock", value: clockEnabled ? "1" : "0"), URLQueryItem(name: "clockTheme", value: clockTheme), URLQueryItem(name: "clockX", value: String(clockX)), URLQueryItem(name: "clockY", value: String(clockY)), URLQueryItem(name: "clockLocked", value: clockLocked ? "1" : "0"), URLQueryItem(name: "clockPerspective", value: clockPerspective)]
+        var items = [URLQueryItem(name: "wallpaper", value: "1"), URLQueryItem(name: "fit", value: fitMode), URLQueryItem(name: "scale", value: String(scale)), URLQueryItem(name: "x", value: String(offsetX)), URLQueryItem(name: "y", value: String(offsetY)), URLQueryItem(name: "locked", value: layoutLocked ? "1" : "0"), URLQueryItem(name: "background", value: backgroundColorHex), URLQueryItem(name: "clock", value: clockEnabled ? "1" : "0"), URLQueryItem(name: "clockTheme", value: clockTheme), URLQueryItem(name: "clockScale", value: String(clockScale)), URLQueryItem(name: "clockX", value: String(clockX)), URLQueryItem(name: "clockY", value: String(clockY)), URLQueryItem(name: "clockLocked", value: clockLocked ? "1" : "0"), URLQueryItem(name: "clockPerspective", value: clockPerspective)]
         if backgroundImageURLs.count == 1 {
             items.append(URLQueryItem(name: "backgroundImage", value: backgroundImageURLs[0]))
         } else if backgroundImageURLs.count == 2 {
@@ -240,16 +246,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     @objc private func showLayout() {
         if let settingsPanel { NSApp.activate(ignoringOtherApps: true); settingsPanel.makeKeyAndOrderFront(nil); return }
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 680), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 730), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         panel.title = "壁纸外观、尺寸与位置"; panel.isFloatingPanel = true; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false; panel.level = .floating; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.center()
         let content = NSView(frame: panel.contentView?.bounds ?? .zero); panel.contentView = content
-        content.addSubview(label("桌面时钟", NSRect(x: 24, y: 632, width: 120, height: 20)))
-        let clockVisible = NSButton(checkboxWithTitle: "显示桌面时钟", target: self, action: #selector(clockChanged)); clockVisible.frame = NSRect(x: 141, y: 591, width: 276, height: 24); clockVisible.state = clockEnabled ? .on : .off; content.addSubview(clockVisible)
-        content.addSubview(label("时钟主题", NSRect(x: 24, y: 552, width: 110, height: 20)))
-        let clockThemeSelector = NSPopUpButton(frame: NSRect(x: 145, y: 546, width: 270, height: 28)); clockThemeSelector.addItems(withTitles: clockThemeLabels); clockThemeSelector.selectItem(at: clockThemeKeys.firstIndex(of: clockTheme) ?? 0); clockThemeSelector.target = self; clockThemeSelector.action = #selector(clockChanged); content.addSubview(clockThemeSelector)
-        let clockLock = NSButton(checkboxWithTitle: "锁定位置", target: self, action: #selector(clockChanged)); clockLock.frame = NSRect(x: 141, y: 507, width: 100, height: 24); clockLock.state = clockLocked ? .on : .off; content.addSubview(clockLock)
-        let clockPerspectiveSelector = NSPopUpButton(frame: NSRect(x: 258, y: 503, width: 157, height: 28)); clockPerspectiveSelector.addItems(withTitles: clockPerspectiveLabels); clockPerspectiveSelector.selectItem(at: clockPerspectiveKeys.firstIndex(of: clockPerspective) ?? 0); clockPerspectiveSelector.target = self; clockPerspectiveSelector.action = #selector(clockChanged); content.addSubview(clockPerspectiveSelector)
-        let clockHint = label("启用壁纸交互并取消锁定后，可直接拖动时钟；位置会自动保存。", NSRect(x: 24, y: 469, width: 392, height: 30), secondary: true); clockHint.maximumNumberOfLines = 2; content.addSubview(clockHint)
+        content.addSubview(label("桌面时钟", NSRect(x: 24, y: 682, width: 120, height: 20)))
+        let clockVisible = NSButton(checkboxWithTitle: "显示桌面时钟", target: self, action: #selector(clockChanged)); clockVisible.frame = NSRect(x: 141, y: 641, width: 276, height: 24); clockVisible.state = clockEnabled ? .on : .off; content.addSubview(clockVisible)
+        content.addSubview(label("时钟主题", NSRect(x: 24, y: 602, width: 110, height: 20)))
+        let clockThemeSelector = NSPopUpButton(frame: NSRect(x: 145, y: 596, width: 270, height: 28)); clockThemeSelector.addItems(withTitles: clockThemeLabels); clockThemeSelector.selectItem(at: clockThemeKeys.firstIndex(of: clockTheme) ?? 0); clockThemeSelector.target = self; clockThemeSelector.action = #selector(clockChanged); content.addSubview(clockThemeSelector)
+        content.addSubview(label("时钟尺寸", NSRect(x: 24, y: 562, width: 110, height: 20)))
+        let clockScaleSlider = NSSlider(value: clockScale, minValue: 0.5, maxValue: 2, target: self, action: #selector(clockChanged)); clockScaleSlider.frame = NSRect(x: 145, y: 560, width: 210, height: 24); clockScaleSlider.isContinuous = true; content.addSubview(clockScaleSlider)
+        let clockScaleValue = label("", NSRect(x: 365, y: 562, width: 52, height: 20), secondary: true); clockScaleValue.alignment = .right; content.addSubview(clockScaleValue)
+        let clockLock = NSButton(checkboxWithTitle: "锁定位置", target: self, action: #selector(clockChanged)); clockLock.frame = NSRect(x: 141, y: 517, width: 100, height: 24); clockLock.state = clockLocked ? .on : .off; content.addSubview(clockLock)
+        let clockPerspectiveSelector = NSPopUpButton(frame: NSRect(x: 258, y: 513, width: 157, height: 28)); clockPerspectiveSelector.addItems(withTitles: clockPerspectiveLabels); clockPerspectiveSelector.selectItem(at: clockPerspectiveKeys.firstIndex(of: clockPerspective) ?? 0); clockPerspectiveSelector.target = self; clockPerspectiveSelector.action = #selector(clockChanged); content.addSubview(clockPerspectiveSelector)
+        let clockHint = label("启用壁纸交互并取消锁定后，可直接拖动时钟；位置会自动保存。", NSRect(x: 24, y: 477, width: 392, height: 30), secondary: true); clockHint.maximumNumberOfLines = 2; content.addSubview(clockHint)
         content.addSubview(label("壁纸外观", NSRect(x: 24, y: 430, width: 120, height: 20)))
         content.addSubview(label("背景图", NSRect(x: 24, y: 395, width: 110, height: 20)))
         let backgroundImage = NSPopUpButton(frame: NSRect(x: 145, y: 389, width: 270, height: 28)); backgroundImage.addItem(withTitle: "无（仅背景色）"); backgroundImage.addItems(withTitles: backgrounds.map(\.name)); backgroundImage.selectItem(at: (backgrounds.firstIndex(where: { $0.id == backgroundImageID }).map { $0 + 1 }) ?? 0); backgroundImage.target = self; backgroundImage.action = #selector(backgroundImageChanged); content.addSubview(backgroundImage)
@@ -272,10 +281,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let hint = label("解锁后可在交互模式中拖动壁纸或用滚轮缩放；所有调整会自动保存。", NSRect(x: 24, y: 66, width: 392, height: 30), secondary: true); hint.maximumNumberOfLines = 2; content.addSubview(hint)
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetLayout)); reset.frame = NSRect(x: 24, y: 22, width: 96, height: 32); content.addSubview(reset)
         let done = NSButton(title: "完成", target: self, action: #selector(closeLayout)); done.keyEquivalent = "\r"; done.frame = NSRect(x: 320, y: 22, width: 96, height: 32); content.addSubview(done)
-        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; backgroundColorControl = backgroundColor; backgroundImageControl = backgroundImage; clockEnabledControl = clockVisible; clockThemeControl = clockThemeSelector; clockLockControl = clockLock; clockPerspectiveControl = clockPerspectiveSelector; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
+        settingsPanel = panel; fitControl = fit; scaleControl = scaleSlider; xControl = xSlider; yControl = ySlider; lockControl = lock; backgroundColorControl = backgroundColor; backgroundImageControl = backgroundImage; clockEnabledControl = clockVisible; clockThemeControl = clockThemeSelector; clockScaleControl = clockScaleSlider; clockLockControl = clockLock; clockPerspectiveControl = clockPerspectiveSelector; clockScaleLabel = clockScaleValue; scaleLabel = scaleValue; xLabel = xValue; yLabel = yValue; updateLabels()
         NSApp.activate(ignoringOtherApps: true); panel.orderFrontRegardless(); panel.makeKey()
     }
-    private func updateLabels() { scaleLabel?.stringValue = String(format: "%.0f%%", (scaleControl?.doubleValue ?? 1) * 100); xLabel?.stringValue = String(format: "%+.0f%%", xControl?.doubleValue ?? 0); yLabel?.stringValue = String(format: "%+.0f%%", yControl?.doubleValue ?? 0) }
+    private func updateLabels() { clockScaleLabel?.stringValue = String(format: "%.0f%%", (clockScaleControl?.doubleValue ?? 1) * 100); scaleLabel?.stringValue = String(format: "%.0f%%", (scaleControl?.doubleValue ?? 1) * 100); xLabel?.stringValue = String(format: "%+.0f%%", xControl?.doubleValue ?? 0); yLabel?.stringValue = String(format: "%+.0f%%", yControl?.doubleValue ?? 0) }
     @objc private func layoutChanged() {
         guard let fitControl, let scaleControl, let xControl, let yControl, let lockControl else { return }
         let defaults = UserDefaults.standard; defaults.set(fitKeys[max(0, fitControl.indexOfSelectedItem)], forKey: "fitMode"); defaults.set(scaleControl.doubleValue, forKey: "scale"); defaults.set(xControl.doubleValue, forKey: "offsetX"); defaults.set(yControl.doubleValue, forKey: "offsetY"); defaults.set(lockControl.state == .on, forKey: "layoutLocked"); updateLabels(); applyLayout()
@@ -304,20 +313,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         windows.forEach { $0.backgroundColor = nativeColor }
     }
     @objc private func clockChanged() {
-        guard let clockEnabledControl, let clockThemeControl, let clockLockControl, let clockPerspectiveControl else { return }
+        guard let clockEnabledControl, let clockThemeControl, let clockScaleControl, let clockLockControl, let clockPerspectiveControl else { return }
         let defaults = UserDefaults.standard
         defaults.set(clockEnabledControl.state == .on, forKey: "clockEnabled")
         defaults.set(clockThemeKeys[max(0, clockThemeControl.indexOfSelectedItem)], forKey: "clockTheme")
+        defaults.set(clockScaleControl.doubleValue, forKey: "clockScale")
         defaults.set(clockLockControl.state == .on, forKey: "clockLocked")
         defaults.set(clockPerspectiveKeys[max(0, clockPerspectiveControl.indexOfSelectedItem)], forKey: "clockPerspective")
         applyClock()
     }
     private func applyClock() {
-        let values: [String: Any] = ["enabled": clockEnabled, "theme": clockTheme, "x": clockX, "y": clockY, "locked": clockLocked, "perspective": clockPerspective]
+        let values: [String: Any] = ["enabled": clockEnabled, "theme": clockTheme, "scale": clockScale, "x": clockX, "y": clockY, "locked": clockLocked, "perspective": clockPerspective]
         guard let data = try? JSONSerialization.data(withJSONObject: values), let json = String(data: data, encoding: .utf8) else { return }
         webViews.forEach { $0.evaluateJavaScript("window.__setWallpaperClock?.(\(json))") }
     }
-    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; backgroundColorControl?.color = .black; backgroundImageControl?.selectItem(at: 0); clockEnabledControl?.state = .on; clockThemeControl?.selectItem(at: 0); clockLockControl?.state = .on; clockPerspectiveControl?.selectItem(at: 0); UserDefaults.standard.set(82, forKey: "clockX"); UserDefaults.standard.set(18, forKey: "clockY"); layoutChanged(); backgroundColorChanged(); backgroundImageChanged(); clockChanged() }
+    @objc private func resetLayout() { fitControl?.selectItem(at: 1); scaleControl?.doubleValue = 1; xControl?.doubleValue = 0; yControl?.doubleValue = 0; lockControl?.state = .on; backgroundColorControl?.color = .black; backgroundImageControl?.selectItem(at: 0); clockEnabledControl?.state = .on; clockThemeControl?.selectItem(at: 0); clockScaleControl?.doubleValue = 1; clockLockControl?.state = .on; clockPerspectiveControl?.selectItem(at: 0); UserDefaults.standard.set(82, forKey: "clockX"); UserDefaults.standard.set(18, forKey: "clockY"); layoutChanged(); backgroundColorChanged(); backgroundImageChanged(); clockChanged() }
     @objc private func closeLayout() { settingsPanel?.orderOut(nil) }
 
     @objc private func selectModel() {
