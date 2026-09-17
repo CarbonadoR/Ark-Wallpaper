@@ -271,6 +271,7 @@ const CLOCK_THEME_MARKS = {
   lonetrail: "/api/clock/assets/lonetrail-mark",
   rainbowsix: "/api/clock/assets/rainbowsix-title",
   volcano: "/api/clock/assets/volcano-title",
+  monochrome: "/api/clock/assets/rhodes-time",
 };
 
 function DesktopClock({ settings, onChange }) {
@@ -317,7 +318,7 @@ function DesktopClock({ settings, onChange }) {
   };
 
   return <section
-    className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}`}
+    className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}${settings.perspective ? " perspective" : ""}`}
     style={{ left: `${settings.x}%`, top: `${settings.y}%` }}
     onPointerDown={pointerDown}
     onPointerMove={pointerMove}

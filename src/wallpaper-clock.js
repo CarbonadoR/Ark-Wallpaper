@@ -1,4 +1,4 @@
-export const CLOCK_THEME_IDS = ["rhodes", "lonetrail", "rainbowsix", "volcano"];
+export const CLOCK_THEME_IDS = ["rhodes", "lonetrail", "rainbowsix", "volcano", "monochrome"];
 
 const bounded = (value, fallback, minimum, maximum) => {
   if (value == null || value === "") return fallback;
@@ -20,6 +20,7 @@ export function normalizeWallpaperClock(settings = {}) {
     x: bounded(settings.x, 82, 4, 96),
     y: bounded(settings.y, 18, 6, 94),
     locked: boolean(settings.locked, true),
+    perspective: boolean(settings.perspective, false),
   };
 }
 
@@ -30,6 +31,7 @@ export function wallpaperClockFromSearch(searchParams) {
     x: searchParams.get("clockX"),
     y: searchParams.get("clockY"),
     locked: searchParams.get("clockLocked"),
+    perspective: searchParams.get("clockPerspective"),
   });
 }
 

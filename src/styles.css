@@ -343,11 +343,13 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
   background: linear-gradient(112deg, rgba(4, 9, 12, .91), rgba(8, 14, 17, .66));
   box-shadow: 0 16px 46px rgba(0, 0, 0, .34), inset 0 0 0 1px rgba(255, 255, 255, .035);
   transform: translate(-50%, -50%);
+  transform-origin: 72% 52%;
   backdrop-filter: blur(12px);
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
 }
+.desktop-clock.perspective { transform: translate(-50%, -50%) perspective(920px) rotateX(2.5deg) rotateY(-10deg) rotateZ(-1deg); filter: drop-shadow(20px 18px 12px rgba(0, 0, 0, .28)); }
 .desktop-clock::before { content: ""; position: absolute; inset: 0; opacity: .13; background: url("/api/clock/assets/rhodes-pattern") center / 64px repeat; pointer-events: none; }
 .desktop-clock::after { content: ""; position: absolute; right: -1px; top: -1px; width: 58px; height: 4px; background: var(--clock-accent); box-shadow: 0 0 14px rgba(var(--clock-accent-rgb), .6); pointer-events: none; }
 .desktop-clock.locked { pointer-events: none; }
@@ -378,9 +380,25 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
 
 .clock-volcano { --clock-accent: #ff746f; --clock-accent-rgb: 255, 116, 111; color: #24364a; background: linear-gradient(110deg, rgba(255, 246, 225, .94), rgba(188, 226, 235, .87)); border-radius: 7px 22px 7px 7px; box-shadow: 0 17px 44px rgba(17, 52, 67, .24); }
 .clock-volcano::before { opacity: .2; background: url("/api/clock/assets/volcano-pattern") center / 72px repeat; }
+.clock-volcano::after { top: 0; right: 18px; width: 48px; border-radius: 0 0 0 3px; }
+.clock-volcano .clock-accent { left: 0; top: 19px; bottom: 19px; border-radius: 0 3px 3px 0; }
 .clock-volcano .clock-caption span, .clock-volcano .clock-date { color: rgba(36, 54, 74, .62); }
 .clock-volcano .clock-time strong { font-family: var(--font-display); font-weight: 650; text-shadow: none; }
 .clock-volcano .clock-mark { height: 25px; filter: saturate(.9) contrast(1.1); }
+
+.clock-monochrome { --clock-accent: #ffd51f; --clock-accent-rgb: 255, 213, 31; min-height: 136px; padding: 12px 12px 10px 18px; border: 0; color: #fff; background: transparent; box-shadow: none; backdrop-filter: none; }
+.clock-monochrome::before { inset: 7px -5px 9px 58%; opacity: .3; background: url("/api/clock/assets/rhodes-pattern") center / 48px repeat; -webkit-mask-image: linear-gradient(90deg, transparent, #000 28%); mask-image: linear-gradient(90deg, transparent, #000 28%); }
+.clock-monochrome::after { right: 8px; top: 2px; width: 104px; height: 6px; box-shadow: 0 3px 0 #0a0b0c; }
+.clock-monochrome .clock-accent { left: 0; top: 8px; bottom: 8px; width: 7px; background: #fff; border-left: 3px solid #0a0b0c; box-shadow: 7px 0 0 var(--clock-accent); }
+.clock-monochrome .clock-mark { height: 24px; margin-right: 5px; filter: grayscale(1) brightness(0) invert(1) drop-shadow(2px 2px 0 #000); }
+.clock-monochrome .clock-caption { align-items: center; width: max-content; padding: 4px 8px; background: #08090a; clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%); }
+.clock-monochrome .clock-caption b { color: #fff; font-weight: 900; }
+.clock-monochrome .clock-caption span { color: rgba(255,255,255,.72); font-weight: 700; }
+.clock-monochrome .clock-time { gap: 10px; }
+.clock-monochrome .clock-time strong { color: #fff; font-family: var(--font-display); font-size: clamp(52px, 4.8vw, 70px); font-weight: 900; letter-spacing: -.075em; -webkit-text-stroke: 2px #090a0b; paint-order: stroke fill; text-shadow: 3px 4px 0 #090a0b, 8px 9px 0 rgba(0,0,0,.24); }
+.clock-monochrome .clock-time span { margin-top: 8px; padding: 5px 7px; color: #070809; background: #fff; border: 2px solid #090a0b; box-shadow: 4px 4px 0 var(--clock-accent); font-size: 15px; font-weight: 900; }
+.clock-monochrome .clock-date { margin-left: 3px; padding: 6px 8px; border: 0; color: #fff; background: rgba(7,8,9,.84); font-weight: 800; box-shadow: inset 4px 0 0 var(--clock-accent); }
+.clock-monochrome .clock-date i { color: #08090a; padding: 1px 5px; background: #fff; font-weight: 900; }
 
 @media (max-width: 1180px) {
   .app { grid-template-columns: 270px 1fr; }
