@@ -271,7 +271,6 @@ const CLOCK_THEME_MARKS = {
   lonetrail: "/api/clock/assets/lonetrail-mark",
   rainbowsix: "/api/clock/assets/rainbowsix-title",
   volcano: "/api/clock/assets/volcano-title",
-  monochrome: "/api/clock/assets/rhodes-time",
 };
 
 function DesktopClock({ settings, onChange }) {
@@ -291,6 +290,7 @@ function DesktopClock({ settings, onChange }) {
   const time = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
   const seconds = String(now.getSeconds()).padStart(2, "0");
   const date = now.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" });
+  const textOnly = settings.theme === "monochrome";
 
   const pointerDown = (event) => {
     if (settings.locked || event.button !== 0) return;
@@ -318,7 +318,7 @@ function DesktopClock({ settings, onChange }) {
   };
 
   return <section
-    className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}${settings.perspective ? " perspective" : ""}`}
+    className={`desktop-clock clock-${settings.theme}${settings.locked ? " locked" : " movable"}${settings.perspective !== "none" ? ` perspective-${settings.perspective}` : ""}`}
     style={{ left: `${settings.x}%`, top: `${settings.y}%` }}
     onPointerDown={pointerDown}
     onPointerMove={pointerMove}
@@ -326,11 +326,11 @@ function DesktopClock({ settings, onChange }) {
     onPointerCancel={pointerUp}
     aria-label={`当前时间 ${time}:${seconds}`}
   >
-    <div className="clock-accent"></div>
-    <img className="clock-mark" src={CLOCK_THEME_MARKS[settings.theme]} alt="" draggable="false" />
-    <div className="clock-caption"><b>LOCAL TIME</b><span>罗德岛终端 / PRTS</span></div>
+    {!textOnly && <><div className="clock-accent"></div>
+      <img className="clock-mark" src={CLOCK_THEME_MARKS[settings.theme]} alt="" draggable="false" />
+      <div className="clock-caption"><b>LOCAL TIME</b><span>罗德岛终端 / PRTS</span></div></>}
     <div className="clock-time"><strong>{time}</strong><span>{seconds}</span></div>
-    <div className="clock-date">{date}<i>LOCAL</i></div>
+    <div className="clock-date">{date}{!textOnly && <i>LOCAL</i>}</div>
     {!settings.locked && <small className="clock-drag-hint">DRAG TO MOVE</small>}
   </section>;
 }

@@ -9,18 +9,18 @@ test("normalizes desktop clock settings", () => {
     x: 96,
     y: 6,
     locked: false,
-    perspective: false,
+    perspective: "none",
   });
 });
 
 test("reads desktop clock settings from wallpaper URL", () => {
-  assert.deepEqual(wallpaperClockFromSearch(new URLSearchParams("clock=1&clockTheme=monochrome&clockX=24.5&clockY=71&clockLocked=0&clockPerspective=1")), {
+  assert.deepEqual(wallpaperClockFromSearch(new URLSearchParams("clock=1&clockTheme=monochrome&clockX=24.5&clockY=71&clockLocked=0&clockPerspective=right")), {
     enabled: true,
     theme: "monochrome",
     x: 24.5,
     y: 71,
     locked: false,
-    perspective: true,
+    perspective: "right",
   });
 });
 
@@ -31,16 +31,22 @@ test("uses a visible top-right default position when URL coordinates are absent"
     x: 82,
     y: 18,
     locked: true,
-    perspective: false,
+    perspective: "none",
   });
 });
 
 test("moves the desktop clock in viewport-relative coordinates and clamps it on screen", () => {
-  assert.deepEqual(moveWallpaperClock({ enabled: true, theme: "rhodes", x: 50, y: 50, locked: false, perspective: true }, {
+  assert.deepEqual(moveWallpaperClock({ enabled: true, theme: "rhodes", x: 50, y: 50, locked: false, perspective: "left" }, {
     deltaX: 200,
     deltaY: -100,
     viewportWidth: 1000,
     viewportHeight: 500,
-  }), { enabled: true, theme: "rhodes", x: 70, y: 30, locked: false, perspective: true });
+  }), { enabled: true, theme: "rhodes", x: 70, y: 30, locked: false, perspective: "left" });
   assert.equal(moveWallpaperClock({ x: 95, y: 50 }, { deltaX: 1000, viewportWidth: 1000 }).x, 96);
+});
+
+test("keeps legacy boolean perspective settings as left tilt", () => {
+  assert.equal(normalizeWallpaperClock({ perspective: true }).perspective, "left");
+  assert.equal(normalizeWallpaperClock({ perspective: false }).perspective, "none");
+  assert.equal(normalizeWallpaperClock({ perspective: "none" }).perspective, "none");
 });

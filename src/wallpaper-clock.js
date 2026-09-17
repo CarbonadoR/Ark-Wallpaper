@@ -12,6 +12,13 @@ const boolean = (value, fallback) => {
   return Boolean(value);
 };
 
+const perspective = (value) => {
+  const normalized = String(value ?? "").toLowerCase();
+  if (["left", "right"].includes(normalized)) return normalized;
+  if (["", "none", "0", "false", "off", "no"].includes(normalized)) return "none";
+  return boolean(value, false) ? "left" : "none";
+};
+
 export function normalizeWallpaperClock(settings = {}) {
   const theme = String(settings.theme || "rhodes").toLowerCase();
   return {
@@ -20,7 +27,7 @@ export function normalizeWallpaperClock(settings = {}) {
     x: bounded(settings.x, 82, 4, 96),
     y: bounded(settings.y, 18, 6, 94),
     locked: boolean(settings.locked, true),
-    perspective: boolean(settings.perspective, false),
+    perspective: perspective(settings.perspective),
   };
 }
 
