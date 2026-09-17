@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client";
 import * as PIXI from "pixi.js";
 import { Spine, settings as spineSettings } from "pixi-spine";
+import { interactionAnimations, randomInteractionAnimation } from "./interaction.js";
 import { calculateLayout, layoutFromSearch, normalizeLayout } from "./layout.js";
 import { normalizeWallpaperBackground, wallpaperBackgroundFromSearch } from "./wallpaper-background.js";
 import "./styles.css";
@@ -37,13 +38,6 @@ function preferredModel(group) {
 
 function idleAnimation(names) {
   return names.find((name) => /(^|[_-])(idle|loop)([_-]|$)/i.test(name)) || names[0] || null;
-}
-
-function interactionAnimation(names) {
-  return names.find((name) => /^interact$/i.test(name))
-    || names.find((name) => /(^|[_-])(interact|touch|tap|click)([_-]|$)/i.test(name))
-    || names.find((name) => /(^|[_-])special([_-]|$)/i.test(name))
-    || null;
 }
 
 function loadSpine(model) {
@@ -107,7 +101,7 @@ async function loadStaticImage(model) {
 
 function Stage({ model, resetSignal, onReady, onError }) {
   const hostRef = useRef(null);
-  const stateRef = useRef({ app: null, display: null, spine: null, loader: null, texture: null, model: null, animations: [], idle: null, interaction: null, layout: initialLayout, baseScaleX: 1, baseScaleY: 1, scale: 1, onReady });
+  const stateRef = useRef({ app: null, display: null, spine: null, loader: null, texture: null, model: null, animations: [], idle: null, interactions: [], layout: initialLayout, baseScaleX: 1, baseScaleY: 1, scale: 1, onReady });
   stateRef.current.onReady = onReady;
 
   useEffect(() => {
@@ -170,11 +164,13 @@ function Stage({ model, resetSignal, onReady, onError }) {
         window.webkit?.messageHandlers?.wallpaperTransform?.postMessage(state.layout);
         return;
       }
-      if (moved || !state.spine || !state.interaction) return;
+      if (moved || !state.spine) return;
+      const interaction = randomInteractionAnimation(state.interactions);
+      if (!interaction) return;
       const spine = state.spine;
-      const entry = spine.state.setAnimation(0, state.interaction, false);
-      if (state.idle && state.idle !== state.interaction) spine.state.addAnimation(0, state.idle, true, 0);
-      state.onReady?.({ model: state.model, spine, animations: state.animations, current: state.interaction });
+      const entry = spine.state.setAnimation(0, interaction, false);
+      if (state.idle && state.idle !== interaction) spine.state.addAnimation(0, state.idle, true, 0);
+      state.onReady?.({ model: state.model, spine, animations: state.animations, current: interaction });
       entry.listener = {
         complete: () => {
           if (stateRef.current.spine === spine && state.idle) state.onReady?.({ model: state.model, spine, animations: state.animations, current: state.idle });
@@ -222,7 +218,7 @@ function Stage({ model, resetSignal, onReady, onError }) {
       state.display?.destroy({ children: true });
       state.texture?.destroy(true);
       state.loader?.destroy?.();
-      Object.assign(state, { display: null, spine: null, loader: null, texture: null, model: null, animations: [], idle: null, interaction: null });
+      Object.assign(state, { display: null, spine: null, loader: null, texture: null, model: null, animations: [], idle: null, interactions: [] });
       try {
         const loaded = model.mediaType === "image" ? await loadStaticImage(model) : await loadSpine(model);
         if (cancelled) {
@@ -235,13 +231,13 @@ function Stage({ model, resetSignal, onReady, onError }) {
         if (loaded.spine) loaded.spine.scale.y = -1;
         const names = (loaded.spine?.spineData?.animations || []).map((animation) => animation.name);
         const initial = idleAnimation(names);
-        const interaction = interactionAnimation(names);
+        const interactions = interactionAnimations(names);
         if (initial) loaded.spine.state.setAnimation(0, initial, true);
         loaded.spine?.update(0);
         container.addChild(loaded.spine || loaded.sprite);
         const bounds = container.getLocalBounds();
         container.pivot.set(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-        Object.assign(state, { display: container, spine: loaded.spine || null, loader: loaded.loader || null, texture: loaded.texture || null, model, animations: names, idle: initial, interaction });
+        Object.assign(state, { display: container, spine: loaded.spine || null, loader: loaded.loader || null, texture: loaded.texture || null, model, animations: names, idle: initial, interactions });
         state.app.stage.addChild(container);
         state.recenter();
         onReady({ model, spine: loaded.spine || null, animations: names, current: initial });
