@@ -1,52 +1,82 @@
-# Arknights Dynamic Character Viewer
+# Ark Wallpaper
 
-用于在本地检查与展示《明日方舟》动态及静态立绘资源的查看器，并附带 macOS 桌面壁纸应用。当前版本针对 Spine 3.8.99 动态资源、`charpack` / `skinpack` 静态资源与角色表进行了适配。
+本项目是一个本地《明日方舟》动态/静态立绘查看器，并提供桌面动态壁纸功能。
 
-## 当前能力
+> [!IMPORTANT]
+> 桌面壁纸应用目前仅支持 macOS。网页查看器可在本地浏览器中运行，但项目尚未提供 Windows 或 Linux 桌面壁纸实现。
 
-- 自动扫描资源目录，不依赖预先存在的角色名数据库
-- 接入 `charpack` 的精英一/精英二立绘与 `skinpack` 的皮肤立绘
-- 自动合成静态及 Spine 纹理中由 Unity 分离导出的颜色纹理与 Alpha 遮罩
-- 从 `chartable` 读取中文角色名和英文代号，并用于目录展示与搜索
-- 支持二进制 `.skel` 与无扩展名 JSON 骨骼
-- 支持多页 atlas、文件名不完全一致的骨骼/图集配对
-- 每名干员只占一个目录条目，并在条目内依次切换精英一、精英二、各皮肤的静态与动态资源
-- 可按资源类型筛选目录，并在窄屏设备使用滑出式资源目录与模型信息面板
-- 枚举并播放骨骼内全部动画
-- 点击画布播放模型交互动作，并在结束后自动回到待机动作
-- 画布拖动、滚轮缩放与一键复位（拖动不会误触发交互）
-- 支持复制稳定模型 ID，以及 `/` 聚焦检索、`R` 复位、`Esc` 关闭面板等快捷键
-- macOS 多屏桌面壁纸、交互开关、填充模式、位置/缩放和布局锁定
-- macOS 系统色轮选择壁纸背景色，并持久化到下次启动
-- 从 `arts/ui/homebackground` 自动发现主页背景，可选择模糊版或由左右原图拼接的高清版
-- 使用 `arts/ui` 原始界面素材提供可拖动桌面时钟，内置罗德岛、孤星、彩虹六号、火山假日和纯文字重字主题
-- 按纹理与资源批次识别直通、预乘及混合 Alpha，并修正无效透明 RGB，避免部件缺失、黑边、白边和半透明雾团
-- 可选本地 metadata 覆盖层，后续可无侵入补充角色名与皮肤名
+本仓库只包含查看器和壁纸应用的源代码，不包含、下载或分发任何游戏资源。运行前需要由用户自行准备资源，并放入项目根目录的 `arts`、`charpack`、`chartable` 和 `skinpack`。这四个资源目录已被 `.gitignore` 排除，禁止提交或推送到 Git 仓库。
 
-## 配置
+## 功能
 
-复制示例并设置资源目录：
+- 浏览 Spine 3.8.99 动态立绘、动态头像和静态立绘
+- 支持二进制 `.skel`、JSON 骨骼、多页 atlas 及 Unity 分离颜色/Alpha 纹理
+- 将同一干员的精英一、精英二、皮肤、动态立绘和动态头像合并为单一条目
+- 从角色表读取名称，支持搜索、筛选、变体切换和动画选择
+- 点击模型时随机触发可用的 `Interact` / `Special` 动作
+- 处理直通、预乘和混合 Alpha，减少黑边、白边与半透明雾团
+- macOS 多屏桌面壁纸、交互开关、填充模式、位置/缩放及布局锁定
+- 背景色、主页背景图选择，以及预留的背景图片/背景 Spine 分层接口
+- 可拖动桌面时钟、主题切换、50%–200% 尺寸和左右对称的 3D 透视
+
+## 平台与环境
+
+- 桌面壁纸：macOS（当前唯一支持的平台）
+- 本地网页查看器：现代浏览器
+- Node.js 与 npm
+- macOS 壁纸构建还需要系统自带的 Swift 编译器、AppKit、WebKit 和 `codesign`
+
+壁纸应用是本地临时签名构建，不是经过 Apple 公证的发行包。
+
+## 准备资源
+
+将资源放在仓库根目录，目录结构如下：
+
+```text
+Ark-Wallpaper/
+├── arts/
+│   ├── dynchars/                       # Spine 动态资源
+│   └── ui/
+│       └── homebackground/wrapper/     # UI 与主页背景
+├── charpack/                           # 普通/精英静态立绘
+├── chartable/                          # character_table*.json 等角色表
+└── skinpack/                           # 皮肤静态立绘
+```
+
+`chartable` 也可以通过配置指向单个角色表 JSON。资源的实际内容和授权不属于本项目，请勿将上述目录加入提交。
+
+复制本地配置：
 
 ```bash
 cp config/runtime.example.json config/runtime.local.json
 ```
 
-新的完整美术包目录结构如下，动态模型与主页背景分别配置：
+默认示例使用相对于 `config` 目录的路径：
 
 ```json
 {
+  "host": "127.0.0.1",
+  "port": 8791,
   "resourceRoot": "../arts/dynchars",
   "backgroundRoot": "../arts/ui/homebackground/wrapper",
   "uiRoot": "../arts/ui",
   "charpackRoot": "../charpack",
   "skinpackRoot": "../skinpack",
-  "characterTableFile": "../chartable"
+  "characterTableFile": "../chartable",
+  "metadataFile": "./metadata.local.json"
 }
 ```
 
-`characterTableFile` 既可指向单个角色表 JSON，也可指向目录；指向目录时会自动选择最新的 `character_table*.json`。同一干员的普通立绘、全部皮肤、动态立绘与动态头像会合并到唯一的干员条目中，条目内按精英一、精英二、其他服装排列，并在同一服装内依次显示静态立绘、动态立绘和动态头像。当前角色表不含正式皮肤名称，因此部分服装暂时显示资源标签（例如 `summer#9`），后续可继续通过 metadata 覆盖。
+`config/runtime.local.json` 和 `config/metadata.local.json` 也已被 Git 忽略，可安全填写本机绝对路径。不要把带有本机路径、私有地址、代理、令牌或来源信息的本地配置复制回示例文件。
 
-`config/runtime.local.json` 不会被 Git 跟踪。角色名元数据可参照 `config/metadata.example.json` 创建 `config/metadata.local.json`：
+`characterTableFile` 支持两种配置方式：
+
+- 指向目录（默认 `../chartable`）：自动选择目录中修改时间最新的 `character_table*.json`，支持 `character_table_<hash>.json` 这类带 hash 的文件名。
+- 指向具体文件：例如 `../chartable/character_table_<hash>.json`；此模式不限制文件名，适合锁定某个资源版本。
+
+也可以用环境变量 `ARKNIGHTS_CHARACTER_TABLE` 临时覆盖该路径。本地配置和 `chartable` 目录都不会提交到仓库。
+
+如需手动补充名称，可从 `config/metadata.example.json` 创建 `config/metadata.local.json`：
 
 ```json
 {
@@ -59,7 +89,7 @@ cp config/runtime.example.json config/runtime.local.json
 }
 ```
 
-## 运行
+## 运行网页查看器
 
 ```bash
 npm install
@@ -68,26 +98,56 @@ npm run build
 npm start
 ```
 
-默认地址为 `http://127.0.0.1:8791/`。
+默认仅监听本机地址：<http://127.0.0.1:8791/>。
 
-查看器采用黑、白、青色的终端式界面。左侧用于检索和筛选资源，中间切换资源变体并预览画面，右侧查看模型信息与播放动作；在窄屏下可通过顶部两侧按钮打开对应面板。
-
-构建并运行 macOS 壁纸：
+开发模式：
 
 ```bash
+npm run dev
+```
+
+## 运行 macOS 桌面壁纸
+
+```bash
+npm install
 npm run macos:run
 ```
 
-在查看器的 Model Inspector 中可找到稳定的 16 位资源 ID，壁纸菜单可用该 ID 切换动态或静态立绘。动态模型 ID 根据 atlas 相对路径生成，静态资源 ID 根据图片相对路径生成；添加角色名元数据不会改变它。
+应用会构建到：
 
-桌面时钟位于“壁纸外观、尺寸与位置”设置中，可开关显示、在 50%–200% 之间调整尺寸、切换主题，并为任意主题选择关闭、左倾或右倾 3D 透视。需要调整位置时，先取消“锁定位置”，再从菜单启用壁纸交互，即可直接拖动时钟；松开后坐标会自动保存。锁定时钟后，其区域不会拦截角色点击交互。
+```text
+build/macos/Arknights Dynamic Wallpaper.app
+```
 
-壁纸页面同时预留了背景图片和背景 Spine 的分层接口。单图可通过 `backgroundImage` / `bgImage` 传入；高清拼接图可通过 `backgroundImageLeft` 与 `backgroundImageRight` 传入。`backgroundSpine` / `bgSpine` 用于标记背景 Spine 资源 ID；运行时可调用 `window.__setWallpaperBackground({ color, imageUrl, imageUrls, spineId })` 更新背景配置。背景 Spine 当前只创建独立挂载层，待资源接口确定后可直接接入渲染器。
+壁纸设置位于 macOS 菜单栏应用的“壁纸外观、尺寸与位置”中。模型 ID 可从网页查看器的 Model Inspector 复制。添加或修改角色名称不会改变稳定模型 ID。
 
-## 资源说明
+桌面时钟也在该设置中配置。取消“锁定位置”并启用壁纸交互后可以拖动；重新锁定后，时钟区域不会拦截角色点击。
 
-资源文件不会复制进本仓库，也不应提交到版本控制。查看器仅从本地配置的目录读取资源。
+## 提交前资源与隐私检查
+
+资源目录、本地配置、构建产物和日志均不应进入版本控制。提交前建议执行：
+
+```bash
+git check-ignore arts charpack chartable skinpack
+git ls-files -- arts charpack chartable skinpack
+git status --short
+```
+
+第一条应显示四个目录均由 `.gitignore` 排除；第二条必须没有输出。如果第二条列出任何文件，请停止提交并先从 Git 索引中移除这些资源。
+
+公开发布前还应检查提交内容中不存在：
+
+- 本机用户名和绝对路径
+- 私有服务器、镜像源或上游资源地址
+- HTTP/SOCKS 代理地址
+- Cookie、访问令牌、密钥和账号信息
 
 ## 免责声明
 
-本项目是由社区独立开发的非官方、非商业本地工具，与《明日方舟》、其开发商、发行商、运营方及相关权利人不存在隶属、授权、认可或合作关系。本仓库不提供或授予游戏资源的使用许可，用户应自行确保资源获取、缓存和展示行为符合适用法律、服务条款及权利人的授权要求。完整内容见 [DISCLAIMER.md](DISCLAIMER.md)。
+本项目是社区独立开发的非官方、非商业本地工具，与《明日方舟》及其开发商、发行商、运营方或其他相关权利人不存在隶属、授权、认可或合作关系。
+
+本仓库不包含游戏资源，也不提供资源下载或资源使用许可。游戏名称、角色、美术、动画、音频、文本、商标及其他内容的权利归各自权利人所有。用户有责任确保其资源来源和使用方式符合适用法律、服务条款及权利人的授权要求。详见 [DISCLAIMER.md](DISCLAIMER.md)。
+
+## 许可证
+
+本仓库中的原创源代码以 [Apache License 2.0](LICENSE) 许可。该许可证仅适用于本项目原创代码，不适用于用户自行放入 `arts`、`charpack`、`chartable`、`skinpack` 的第三方或游戏资源，也不授予任何游戏知识产权的许可。

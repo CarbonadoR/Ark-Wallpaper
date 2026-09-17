@@ -1,7 +1,13 @@
 {
   "name": "arknights-dynchars-viewer",
   "version": "0.1.0",
+  "description": "Local Arknights artwork viewer and macOS dynamic wallpaper app",
   "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CarbonadoR/Ark-Wallpaper.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web -c cyan,magenta \"node --watch server/index.mjs\" \"vite\"",
