@@ -9,3 +9,8 @@ config/metadata.local.json
 /charpack/
 /chartable
 /skinpack/
+AGENTS.md
+windows/**/bin/
+windows/**/obj/
+windows/**/TestResults/
+*.user

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../ArkWallpaper/Settings.cs" Link="Settings.cs" />
+    <Compile Include="../ArkWallpaper/WallpaperProtocol.cs" Link="WallpaperProtocol.cs" />
+    <Compile Include="../ArkWallpaper/LaunchConfiguration.cs" Link="LaunchConfiguration.cs" />
+    <Compile Include="../ArkWallpaper/LocalServerManager.cs" Link="LocalServerManager.cs" />
+    <Compile Include="../ArkWallpaper/OwnedProcessJob.cs" Link="OwnedProcessJob.cs" />
+    <Compile Include="../ArkWallpaper/Diagnostics.cs" Link="Diagnostics.cs" />
+    <Compile Include="../ArkWallpaper/DisplayTopology.cs" Link="DisplayTopology.cs" />
+    <Compile Include="../ArkWallpaper/NativeMethods.cs" Link="NativeMethods.cs" />
+  </ItemGroup>
+</Project>

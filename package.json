@@ -1,7 +1,7 @@
 {
   "name": "arknights-dynchars-viewer",
   "version": "0.1.0",
-  "description": "Local Arknights artwork viewer and macOS dynamic wallpaper app",
+  "description": "Local Arknights artwork viewer and desktop dynamic wallpaper app",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
@@ -17,6 +17,10 @@
     "audit": "node scripts/audit-resources.mjs",
     "macos:build": "npm run build && node scripts/build-macos-app.mjs",
     "macos:run": "npm run macos:build && open -n \"build/macos/Arknights Dynamic Wallpaper.app\"",
+    "windows:build": "npm run build && node scripts/build-windows-app.mjs",
+    "windows:run": "npm run windows:build && node scripts/run-windows-app.mjs",
+    "windows:test": "dotnet run --project windows/ArkWallpaper.Tests -c Release",
+    "windows:smoke": "node scripts/smoke-windows-app.mjs",
     "postinstall": "patch-package"
   },
   "dependencies": {

@@ -499,7 +499,7 @@ function App() {
   }, []);
 
   return (
-    <main className={wallpaperMode ? "app wallpaper" : "app"}>
+    <main className={wallpaperMode ? "app wallpaper" : "app"} data-loaded-model={runtime?.model?.id || undefined}>
       {!wallpaperMode && <aside className={`library ${libraryOpen ? "open" : ""}`}>
         <header className="brand-block">
           <div className="brand-word">ARKNIGHTS</div>
