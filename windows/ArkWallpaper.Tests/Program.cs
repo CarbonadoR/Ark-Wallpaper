@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using ArkWallpaper;
+using Microsoft.Win32;
 
 var passed = 0;
 void Check(bool valid, string name) { if (!valid) throw new Exception(name); Console.WriteLine("PASS " + name); passed++; }
@@ -45,6 +46,36 @@ try
     var logPath = Path.Combine(log.DirectoryPath, "wallpaper.log");
     File.WriteAllText(logPath, new string('x', 4 * 1024 * 1024)); log.Event("test.rotation");
     Check(File.Exists(Path.Combine(log.DirectoryPath, "wallpaper.previous.log")) && new FileInfo(logPath).Length < 1024, "logs rotate at four MiB");
+
+    var startupKey = @"Software\ArkWallpaper.Tests\" + Guid.NewGuid().ToString("N");
+    try
+    {
+        var executable = Path.Combine(directory, "应用 & desktop.exe");
+        var configuration = Path.Combine(directory, "custom launch.json");
+        File.WriteAllText(executable, "fixture"); File.WriteAllText(configuration, "{}");
+        var startup = new StartupRegistration(executable, configuration, startupKey);
+        Check(!startup.IsEnabled, "startup defaults off without creating a registry entry");
+        Check(startup.Command == $"\"{executable}\" --config \"{configuration}\"", "startup quotes spaces, Unicode and shell metacharacters and preserves custom config");
+        startup.SetEnabled(true);
+        Check(new StartupRegistration(executable, configuration, startupKey).IsEnabled, "startup registration persists across instances");
+        using (var key = Registry.CurrentUser.OpenSubKey(startupKey, writable: true)) key!.SetValue("UnrelatedApp", "keep");
+        startup.SetEnabled(false); startup.SetEnabled(false);
+        using (var key = Registry.CurrentUser.OpenSubKey(startupKey))
+            Check(!startup.IsEnabled && (string?)key!.GetValue("UnrelatedApp") == "keep", "disabling startup is idempotent and preserves unrelated entries");
+        var invalidCommand = false;
+        try { StartupRegistration.BuildCommand("relative.exe", configuration); } catch (InvalidOperationException) { invalidCommand = true; }
+        Check(invalidCommand, "startup rejects relative executable paths");
+        invalidCommand = false;
+        try { StartupRegistration.BuildCommand(executable + "\" --other", configuration); } catch (InvalidOperationException) { invalidCommand = true; }
+        Check(invalidCommand, "startup rejects embedded quotes");
+        invalidCommand = false;
+        try { new StartupRegistration(Path.Combine(directory, new string('a', 260) + ".exe"), configuration, startupKey).SetEnabled(true); } catch (InvalidOperationException) { invalidCommand = true; }
+        Check(invalidCommand && !startup.IsEnabled, "oversized Run commands fail without enabling startup");
+        invalidCommand = false;
+        try { new StartupRegistration(Path.Combine(directory, "missing.exe"), configuration, startupKey).SetEnabled(true); } catch (InvalidOperationException) { invalidCommand = true; }
+        Check(invalidCommand && !startup.IsEnabled, "missing startup targets fail without changing registration");
+    }
+    finally { Registry.CurrentUser.DeleteSubKeyTree(startupKey, throwOnMissingSubKey: false); }
 
     var config = new LaunchConfiguration("project with spaces & symbols", "node", "npm cli.js", origin.AbsoluteUri);
     var start = LocalServerManager.StartInfo(config);

@@ -115,6 +115,8 @@ npm run windows:run
 
 应用输出到 `build/windows/win-x64/` 或 `build/windows/win-arm64/`，也可直接启动其中的 `ArkWallpaper.exe`。壁纸设置、交互模式、时钟和场景编辑入口位于系统托盘菜单中。
 
+托盘菜单的“开机自启动（登录时）”可设置当前用户登录后自动启动，默认关闭，无需管理员权限。移动应用或升级后请重新开启。
+
 如需同时构建 x64 和 arm64：
 
 ```powershell

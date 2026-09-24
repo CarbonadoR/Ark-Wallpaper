@@ -12,6 +12,8 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly DesktopHost desktop;
     private readonly MessageWindow messages = new();
     private readonly NotifyIcon tray;
+    private readonly StartupRegistration startup;
+    private readonly ToolStripMenuItem startupItem = new("开机自启动（登录时）");
     private readonly ToolStripMenuItem interactionItem = new("交互模式"), pauseItem = new("暂停壁纸"), diagnosticsItem = new("诊断日志");
     private readonly Dictionary<string, WallpaperWindow> windows = new(StringComparer.Ordinal);
     private readonly PointerTracker pointer;
@@ -29,9 +31,10 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly Dictionary<string, DateTime> rendererRecoveryPending = new(StringComparer.Ordinal);
     private DateTime nextRecovery = DateTime.MinValue;
 
-    public TrayApplication(LaunchConfiguration config, string dataDirectory, string? smokeReport)
+    public TrayApplication(LaunchConfiguration config, string dataDirectory, string? smokeReport, string configurationPath)
     {
         this.config = config; this.dataDirectory = dataDirectory; this.smokeReport = smokeReport;
+        startup = new StartupRegistration(Environment.ProcessPath!, configurationPath);
         store = new SettingsStore(dataDirectory); settings = store.Load();
         log = new Diagnostics(dataDirectory) { Enabled = settings.DiagnosticsEnabled };
         server = new LocalServerManager(config, log); desktop = new DesktopHost(log);
@@ -44,11 +47,30 @@ internal sealed class TrayApplication : ApplicationContext
         menu.Items.Add("打开查看器", null, (_, _) => Open(config.Origin.AbsoluteUri));
         menu.Items.Add("编辑当前模型场景…", null, (_, _) => Open(new UriBuilder(config.Origin) { Query = "sceneEditor=1&model=" + Uri.EscapeDataString(settings.ModelID) }.Uri.AbsoluteUri));
         menu.Items.Add("显示工程", null, (_, _) => Open(config.ProjectRoot));
+        menu.Items.Add(startupItem);
         menu.Items.Add(diagnosticsItem);
         menu.Items.Add("打开日志目录", null, (_, _) => { Directory.CreateDirectory(log.DirectoryPath); Open(log.DirectoryPath); });
         menu.Items.Add(new ToolStripSeparator()); menu.Items.Add("退出", null, (_, _) => ExitThread());
         tray = new NotifyIcon { Text = "Ark Wallpaper · 正在启动", Icon = SystemIcons.Application, ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += async (_, _) => await GuardAsync(OpenSettingsAsync);
+        startupItem.Enabled = smokeReport is null;
+        startupItem.ToolTipText = "当前用户登录后启动，无需管理员权限；移动应用后请重新开启。若被系统禁用，请在 Windows 启动应用设置中启用。";
+        menu.Opening += (_, _) => RefreshStartup();
+        startupItem.Click += (_, _) =>
+        {
+            try
+            {
+                startup.SetEnabled(!startup.IsEnabled);
+                RefreshStartup();
+                log.Event("startup.changed", new { enabled = startupItem.Checked });
+            }
+            catch (Exception e)
+            {
+                RefreshStartup();
+                log.Event("startup.change-failed", new { type = e.GetType().Name });
+                Notify(e is InvalidOperationException ? e.Message : "无法修改开机自启动，请检查当前用户的注册表权限。");
+            }
+        };
         interactionItem.Click += async (_, _) => await GuardAsync(() => SetInteractiveAsync(!interactive));
         pauseItem.Click += async (_, _) => await GuardAsync(async () => { paused = !paused; pauseItem.Checked = paused; pauseItem.Text = paused ? "继续壁纸" : "暂停壁纸"; await UpdateActivityAsync(); });
         diagnosticsItem.Checked = settings.DiagnosticsEnabled;
@@ -73,6 +95,7 @@ internal sealed class TrayApplication : ApplicationContext
         {
             log.Event("application.started");
             await server.EnsureStartedAsync(lifetime.Token);
+            await desktop.WaitUntilReadyAsync(lifetime.Token);
             if (exiting) return;
             environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(dataDirectory, "WebView2"), new CoreWebView2EnvironmentOptions("--no-proxy-server"));
             if (exiting) return;
@@ -247,6 +270,16 @@ internal sealed class TrayApplication : ApplicationContext
         catch (Exception e) { log.Event("application.operation-failed", new { type = e.GetType().Name }); if (!exiting) Notify("操作未完成。请检查服务状态；桌面恢复失败时会自动重试，可开启诊断查看事件。"); }
     }
     private void Notify(string text) => tray.ShowBalloonTip(5000, "Ark Wallpaper", text, ToolTipIcon.Info);
+    private void RefreshStartup()
+    {
+        if (smokeReport is not null) return;
+        try { startupItem.Checked = startup.IsEnabled; startupItem.Enabled = true; }
+        catch (Exception e)
+        {
+            startupItem.Checked = false; startupItem.Enabled = false;
+            log.Event("startup.read-failed", new { type = e.GetType().Name });
+        }
+    }
     private void Open(string target)
     {
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); }

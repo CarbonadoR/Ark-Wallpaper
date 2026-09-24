@@ -7,6 +7,20 @@ internal sealed class DesktopHost(Diagnostics log)
 {
     public nint Worker { get; private set; }
     public bool IsValid => Worker != 0 && NativeMethods.IsWindow(Worker);
+    public async Task WaitUntilReadyAsync(CancellationToken token)
+    {
+        // Explorer may still be creating its desktop when a logon entry runs.
+        for (var attempt = 0; ; attempt++)
+        {
+            token.ThrowIfCancellationRequested();
+            try { FindWorker(); return; }
+            catch (InvalidOperationException) when (attempt < 29)
+            {
+                log.Event("desktop.waiting-for-explorer");
+                await Task.Delay(1000, token);
+            }
+        }
+    }
     public void FindWorker()
     {
         Worker = 0;

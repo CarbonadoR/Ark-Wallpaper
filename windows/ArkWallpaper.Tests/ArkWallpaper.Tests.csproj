@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../ArkWallpaper/Settings.cs" Link="Settings.cs" />
+    <Compile Include="../ArkWallpaper/StartupRegistration.cs" Link="StartupRegistration.cs" />
     <Compile Include="../ArkWallpaper/WallpaperProtocol.cs" Link="WallpaperProtocol.cs" />
     <Compile Include="../ArkWallpaper/LaunchConfiguration.cs" Link="LaunchConfiguration.cs" />
     <Compile Include="../ArkWallpaper/LocalServerManager.cs" Link="LocalServerManager.cs" />

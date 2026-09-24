@@ -11,9 +11,10 @@ internal static class Program
         if (!first) { if (smoke is null) MessageBox.Show("Ark Wallpaper 已在运行，请使用系统托盘菜单。", "Ark Wallpaper"); Environment.ExitCode = 1; return; }
         try
         {
-            var configuration = LaunchConfiguration.Load(Value(args, "--config"));
+            var configurationPath = Path.GetFullPath(Value(args, "--config") ?? Path.Combine(AppContext.BaseDirectory, "launch.local.json"));
+            var configuration = LaunchConfiguration.Load(configurationPath);
             var directory = smoke is null ? SettingsStore.DefaultDirectory : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(smoke))!, "smoke-user-data");
-            using var application = new TrayApplication(configuration, directory, smoke);
+            using var application = new TrayApplication(configuration, directory, smoke, configurationPath);
             Application.Run(application);
         }
         catch (Exception e)
