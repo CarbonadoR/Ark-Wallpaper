@@ -7,6 +7,7 @@ import { calculateLayout, layoutFromSearch, normalizeLayout } from "./layout.js"
 import { normalizeWallpaperBackground, wallpaperBackgroundFromSearch } from "./wallpaper-background.js";
 import { clockPointerTilt, moveWallpaperClock, normalizeWallpaperClock, wallpaperClockFromSearch } from "./wallpaper-clock.js";
 import "./styles.css";
+import { SceneWorkspace } from "./scene-workspace.jsx";
 
 spineSettings.yDown = false;
 const params = new URLSearchParams(location.search);
@@ -406,6 +407,7 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [sceneOpen, setSceneOpen] = useState(params.get("sceneEditor") === "1");
   const [wallpaperBackground, setWallpaperBackground] = useState(initialWallpaperBackground);
   const [wallpaperClock, setWallpaperClock] = useState(initialWallpaperClock);
   const searchRef = useRef(null);
@@ -499,7 +501,7 @@ function App() {
   }, []);
 
   return (
-    <main className={wallpaperMode ? "app wallpaper" : "app"} data-loaded-model={runtime?.model?.id || undefined}>
+    <main className={wallpaperMode ? "app wallpaper" : `app${sceneOpen ? " scene-editing" : ""}`} data-loaded-model={runtime?.model?.id || undefined}>
       {!wallpaperMode && <aside className={`library ${libraryOpen ? "open" : ""}`}>
         <header className="brand-block">
           <div className="brand-word">ARKNIGHTS</div>
@@ -523,6 +525,8 @@ function App() {
 
       <section className="viewer">
         {wallpaperMode && <WallpaperBackground settings={wallpaperBackground} />}
+        {selectedModel && <SceneWorkspace key={selectedModel.id} model={selectedModel} editing={!wallpaperMode && sceneOpen} wallpaper={wallpaperMode} onClose={() => setSceneOpen(false)} />}
+        {!wallpaperMode && selectedModel && <button className="scene-launch" onClick={() => setSceneOpen(value => !value)} aria-pressed={sceneOpen}>场景编辑{selectedModel.scene?.imageCount > 0 && <small>{selectedModel.scene.imageCount} 张外置图片</small>}</button>}
         {!wallpaperMode && <header className="topbar">
           <button className="mobile-trigger" onClick={() => setLibraryOpen(true)} aria-label="打开资源目录"><i></i><i></i><i></i></button>
           <div className="title-block"><div className="eyebrow"><span>OPERATOR / ARTWORK ARCHIVE</span><small>{selectedGroup?.id || "NO RESOURCE"}</small></div><h1>{selectedGroup?.name || "Arknights Artwork Viewer"}</h1><p>{selectedGroup?.skinName || "LOCAL ARTWORK INSPECTION SYSTEM"}</p></div>

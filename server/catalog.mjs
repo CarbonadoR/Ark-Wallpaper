@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { detectPngAlphaMode } from "./png-alpha.mjs";
+import { attachSceneResources } from "./scenes.mjs";
 
 const TEXTURE_PATTERN = /\.(?:png|webp|jpe?g)$/i;
 // Bump whenever server-side texture composition or alpha normalization changes
@@ -145,6 +146,8 @@ export function scanResources(resourceRoot, metadataFile) {
       pageAssetVersions: pageMappings.map(({ sourceName, alphaPath }) => assetVersion(path.join(directory, sourceName), alphaPath)),
     });
   }
+  attachSceneResources(resourceRoot, models, allFiles);
+  for (const model of models) for (const asset of model.sceneAssets) if (asset.alphaPath) referencedAlphaPaths.add(asset.alphaPath);
   for (const alphaPath of allFiles.filter((file) => /\[alpha\](?:\$\d+)?\.png$/i.test(file))) {
     if (!referencedAlphaPaths.has(alphaPath)) issues.push({ texture: path.relative(resourceRoot, alphaPath), problem: "orphan-alpha" });
   }
@@ -179,6 +182,7 @@ export function publicCatalog(index) {
         outfit: model.outfit,
         outfitId: model.outfitId,
         mediaType: model.mediaType || "spine",
+        scene: model.scene || { imageCount: 0, meshCount: 0, placement: "manual" },
         format: model.skeletonFormat,
         spineVersion: model.spineVersion,
         textureCount: model.pages?.length || 0,

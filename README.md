@@ -3,7 +3,7 @@
 本项目是一个本地《明日方舟》动态/静态立绘查看器，并提供桌面动态壁纸功能和交互功能
 
 > [!IMPORTANT]
-> 桌面壁纸应用目前仅支持 macOS。网页查看器可在本地浏览器中运行，但项目尚未提供 Windows 或 Linux 桌面壁纸实现。
+> 桌面壁纸应用已支持 Windows 和 macOS（Mac）。网页查看器也可在本地浏览器中运行。
 
 本仓库只包含查看器和壁纸应用的源代码，不包含、下载或分发任何游戏资源。运行前需要由用户自行准备资源，并放入项目根目录的 `arts`、`charpack`、`chartable` 和 `skinpack`。这四个资源目录已被 `.gitignore` 排除，禁止提交或推送到 Git 仓库。
 
@@ -12,22 +12,24 @@
 - 浏览明日方舟动态立绘、动态头像和静态立绘
 - 按干员浏览精英一、精英二、皮肤、动态立绘和动态头像
 - 点击模型时随机触发可用的 `Interact` / `Special` 动作
-- macOS 多屏桌面壁纸、交互开关、填充模式、位置/缩放及布局锁定
+- Windows / macOS 多屏桌面壁纸、交互开关、填充模式、位置/缩放及布局锁定
 - 桌面背景色、背景图选择
+- 手动填充背景部件：添加可用图片到场景层，调整位置、缩放和图层顺序，按模型保存并同步到壁纸
 - 可拖动，可切换主题的桌面时钟，可用类明日方舟的透视倾斜效果
 
 ## 平台与环境
 
-- 桌面壁纸：macOS（当前唯一支持的平台）
+- 桌面壁纸：Windows 10/11、macOS
 - 本地网页查看器：现代浏览器
 - Node.js 与 npm
 - macOS 壁纸构建还需要系统自带的 Swift 编译器、AppKit、WebKit 和 `codesign`
+- Windows 壁纸构建还需要 .NET 8 或更新的 SDK，以及 Microsoft Edge WebView2 Runtime
 
-壁纸应用是本地临时签名构建，不是经过 Apple 公证的发行包。
+macOS 壁纸应用是本地临时签名构建，不是经过 Apple 公证的发行包。
 
 ## 准备资源
 
-资源获取方式可参考社区经验，本项目不托管任何资源。
+资源获取方式请参考 [Ark-Wallpaper-Resources](https://github.com/CarbonadoR/Ark-Wallpaper-Resources.git)：通过已启用 ADB 的模拟器提取本地游戏资源，并使用 ArkUnpacker 解包为下列四个目录。本项目不托管任何游戏资源。
 将资源放在仓库根目录，目录结构如下：
 
 ```text
@@ -104,6 +106,23 @@ npm start
 npm run dev
 ```
 
+## 运行 Windows 桌面壁纸
+
+```powershell
+npm install
+npm run windows:run
+```
+
+应用输出到 `build/windows/win-x64/` 或 `build/windows/win-arm64/`，也可直接启动其中的 `ArkWallpaper.exe`。壁纸设置、交互模式、时钟和场景编辑入口位于系统托盘菜单中。
+
+如需同时构建 x64 和 arm64：
+
+```powershell
+npm run windows:build -- --arch=all
+```
+
+构建产物自带 .NET 运行时，运行时仍需保留工程和本地资源。更多说明见 [Windows 开发与验证指南](windows/DEVELOPMENT.md)。
+
 ## 运行 macOS 桌面壁纸
 
 ```bash
@@ -120,6 +139,12 @@ build/macos/Arknights Dynamic Wallpaper.app
 壁纸设置位于 macOS 菜单栏应用的“壁纸外观、尺寸与位置”中。模型 ID 可从网页查看器的 Model Inspector 复制。添加或修改角色名称不会改变稳定模型 ID。
 
 桌面时钟也在该设置中配置。取消“锁定位置”并启用壁纸交互后可以拖动；重新锁定后，时钟区域不会拦截角色点击。
+
+## 手动填充背景部件
+
+在网页查看器中选择模型，打开“场景编辑”；Windows 也可从托盘菜单的“编辑当前模型场景…”进入。选择可用的外置图片或已有背景，将其添加到模型后方的场景层，再通过拖动、滚轮或数值输入调整位置和缩放，也可调整图层顺序、透明度及混合方式。
+
+点击“保存并同步壁纸”后，场景按模型保存到本机配置，并同步至已打开的壁纸页面。无法自动识别位置的背景部件可通过此方式手动摆放；原始 3D 场景布局不会自动还原。详细用法见 [手动场景层](docs/scenes.md)。
 
 ## 提交前资源与隐私检查
 

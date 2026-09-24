@@ -42,6 +42,7 @@ internal sealed class TrayApplication : ApplicationContext
         menu.Items.Add("重新加载壁纸", null, (_, _) => { log.Event("wallpaper.reload"); foreach (var window in windows.Values) window.Reload(); });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("打开查看器", null, (_, _) => Open(config.Origin.AbsoluteUri));
+        menu.Items.Add("编辑当前模型场景…", null, (_, _) => Open(new UriBuilder(config.Origin) { Query = "sceneEditor=1&model=" + Uri.EscapeDataString(settings.ModelID) }.Uri.AbsoluteUri));
         menu.Items.Add("显示工程", null, (_, _) => Open(config.ProjectRoot));
         menu.Items.Add(diagnosticsItem);
         menu.Items.Add("打开日志目录", null, (_, _) => { Directory.CreateDirectory(log.DirectoryPath); Open(log.DirectoryPath); });
@@ -82,7 +83,7 @@ internal sealed class TrayApplication : ApplicationContext
             if (store.Recovered) Notify("设置文件损坏，已尝试从备份恢复。请检查壁纸设置。");
             if (smokeReport is not null)
             {
-                await SmokeTests.RunAsync(windows.Values.ToArray(), desktop, settings, server, smokeReport,
+                await SmokeTests.RunAsync(windows.Values.ToArray(), desktop, settings, server, config.Origin, smokeReport,
                     SetInteractiveAsync, ApplySettingsAsync, async p => { paused = p; await UpdateActivityAsync(); }, ReconcileAsync, () => settings);
                 ExitThread();
             }

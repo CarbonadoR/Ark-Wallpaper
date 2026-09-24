@@ -321,6 +321,57 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
 .wallpaper-background-panorama { width: 100%; height: 100%; display: flex; }
 .wallpaper-background-panorama img { width: 50%; height: 100%; display: block; object-fit: fill; }
 .wallpaper-background-spine { position: absolute; inset: 0; }
+.scene-viewport, .scene-handles { position: absolute; inset: 104px 0 0; overflow: hidden; pointer-events: none; }
+.scene-viewport { z-index: 0; isolation: isolate; }
+.scene-image-layer { position: absolute; pointer-events: none; }
+.scene-image-strip { display: flex; width: 100%; height: 100%; }
+.scene-image-strip img { display: block; width: 100%; min-width: 0; flex: 1; height: 100%; object-fit: fill; }
+.stage { z-index: 1; }
+.wallpaper .scene-viewport { inset: 0; }
+.scene-handles { z-index: 4; }
+.scene-selection { position: absolute; border: 1px dashed var(--cyan); pointer-events: auto; touch-action: none; cursor: move; }
+.scene-selection span { position: absolute; top: 0; left: 0; padding: 5px 8px; background: #05191f; color: var(--cyan); font-size: 10px; pointer-events: none; }
+.scene-launch { position: absolute; z-index: 15; bottom: 18px; left: 20px; padding: 10px 14px; color: var(--cyan); border: 1px solid var(--cyan); background: #061116; cursor: pointer; font-size: 11px; }
+.scene-launch small { display: block; margin-top: 4px; color: #9babb0; font-size: 9px; }
+.scene-editing .controls { display: none; }
+.scene-editor { position: absolute; z-index: 25; top: 118px; right: 14px; bottom: 14px; width: 340px; display: flex; flex-direction: column; background: #080e12f5; border: 1px solid #36525d; box-shadow: 0 10px 40px #0009; color: #d5e2e8; }
+.scene-editor header { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #2c3a42; }
+.scene-editor header small { font: 9px var(--font-mono); letter-spacing: .15em; color: var(--cyan); }
+.scene-editor h2 { margin: 6px 0 0; font-size: 19px; font-weight: 600; }
+.scene-editor button { cursor: pointer; color: #c4d3da; border: 1px solid #2c3a42; background: #101a20; padding: 6px 9px; }
+.scene-editor button:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
+.scene-editor button:disabled { opacity: .35; cursor: default; }
+.scene-editor header button { font-size: 20px; border: 0; background: none; }
+.scene-editor-scroll { overflow: auto; flex: 1; min-height: 0; padding: 14px; scrollbar-width: thin; scrollbar-color: #36525d #080e12; }
+.scene-description, .scene-detection, .scene-empty { font-size: 11px; line-height: 1.7; color: #94a7b0; margin: 0 0 12px; }
+.scene-detection { padding: 9px; border-left: 2px solid #b89d5f; background: #b89d5f0e; color: #c4b995; }
+.scene-error { font-size: 11px; line-height: 1.6; color: #fda28f; }
+.scene-section-title { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 9px; }
+.scene-section-title h3 { font-size: 12px; margin: 0; }.scene-section-title span { color: #718995; font-size: 10px; }
+.scene-layer-list { list-style: none; margin: 0; padding: 0; }
+.scene-layer-list li { display: flex; align-items: center; gap: 2px; margin-bottom: 5px; border: 1px solid #263640; }
+.scene-layer-list li.selected { border-color: var(--cyan); background: #15303c; }
+.scene-layer-list button { padding: 7px; border: 0; background: transparent; }
+.scene-layer-list .scene-layer-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; text-align: left; }
+.scene-editor input[type=checkbox] { accent-color: var(--cyan); width: 14px; }
+.scene-transform { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 0; }
+.scene-transform label { display: flex; flex-direction: column; gap: 6px; color: #97acb7; font-size: 10px; }
+.scene-editor input:not([type=checkbox]), .scene-editor select { width: 100%; min-width: 0; padding: 7px; background: #121d25; color: #e0eaf0; border: 1px solid #354b58; border-radius: 0; font: 11px var(--font-mono); }
+.scene-editor :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.scene-transform > button, .scene-transform > p { grid-column: 1 / -1; }
+.scene-library-filter { display: grid; grid-template-columns: 1fr; gap: 7px; margin-bottom: 10px; }
+.scene-assets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.scene-assets button { padding: 0 0 7px; min-width: 0; text-align: left; }
+.scene-thumbnail { display: flex; height: 82px; overflow: hidden; background: repeating-conic-gradient(#16252e 0% 25%, #0c151c 0% 50%) 0 / 16px 16px; }
+.scene-thumbnail img { object-fit: contain; flex: 1; min-width: 0; width: 100%; height: 100%; }
+.scene-assets span, .scene-assets small { display: block; padding: 6px 6px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.scene-assets small { color: #778f9c; font-size: 9px; }
+.scene-editor footer { border-top: 1px solid #2c3a42; padding: 12px; background: #0b151c; }
+.scene-editor footer span { display: block; color: #95aeb9; font-size: 10px; margin-bottom: 10px; }
+.scene-editor footer div { display: flex; gap: 8px; }.scene-editor footer button { flex: 1; font-size: 11px; }
+.scene-editor .scene-save { background: #163849; border-color: #428ca6; color: #b9eeff; }
+.scene-wallpaper-error { position: absolute; bottom: 10px; left: 10px; z-index: 5; color: #fda28f; font-size: 12px; }
+@media (max-width: 600px) { .scene-editor { width: min(340px, calc(100% - 20px)); right: 10px; top: 112px; bottom: 12px; }.scene-launch { left: 12px; bottom: 12px; } }
 .wallpaper .stage { z-index: 1; inset: 0; }
 .wallpaper .viewer::before { z-index: 2; opacity: .1; }
 .wallpaper .viewer::after { display: none; }
@@ -428,6 +479,7 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--cyan); outl
   .variant-label { display: none; }
   .variants button { flex-basis: 142px; }
   .stage { inset: 88px 0 0; }
+  .scene-viewport, .scene-handles { inset: 88px 0 0; }
   .viewport-frame { inset: 162px 16px 48px; }
   .controls { position: absolute; z-index: 22; right: 0; top: 0; bottom: 0; width: min(88vw, 310px); transform: translateX(104%); transition: transform .28s ease; }
   .controls.open { transform: translateX(0); }

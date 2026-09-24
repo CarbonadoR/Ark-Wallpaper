@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Net.Http;
+using System.Net.Http.Json;
 
 namespace ArkWallpaper;
 
@@ -7,7 +9,7 @@ namespace ArkWallpaper;
 internal static class SmokeTests
 {
     public static async Task RunAsync(WallpaperWindow[] windows, DesktopHost desktop, WallpaperSettings original, LocalServerManager server,
-        string report, Func<bool, Task> interaction, Func<WallpaperSettings, Task> apply, Func<bool, Task> pause, Func<Task> reconcile, Func<WallpaperSettings> readSettings)
+        Uri origin, string report, Func<bool, Task> interaction, Func<WallpaperSettings, Task> apply, Func<bool, Task> pause, Func<Task> reconcile, Func<WallpaperSettings> readSettings)
     {
         var checks = new List<string>();
         void Check(bool value, string name) { if (!value) throw new InvalidOperationException("Smoke check failed: " + name); checks.Add(name); }
@@ -89,6 +91,23 @@ internal static class SmokeTests
             await WaitAsync(async () => first.Ready && await first.ExecuteAsync($"document.querySelector('main')?.dataset.loadedModel === {expectedId}") == "true");
             await Task.Delay(500);
             Check(await first.ExecuteAsync("!document.querySelector('.error')") == "true", "model-no-error-" + media);
+            // Exercise the same save API used by the scene editor, then verify SSE
+            // updates every native WebView without navigating or disturbing the model.
+            using var scene = await server.GetAsync("/api/models/" + model.GetProperty("id").GetString() + "/scene", CancellationToken.None);
+            var sceneAsset = scene.RootElement.GetProperty("assets").EnumerateArray().FirstOrDefault();
+            if (sceneAsset.ValueKind != JsonValueKind.Undefined)
+            {
+                using var http = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(5) };
+                var endpoint = new Uri(origin, "/api/models/" + model.GetProperty("id").GetString() + "/scene");
+                var beforeScene = windows.Select(w => w.NavigationCount).ToArray();
+                using var saved = await http.PutAsJsonAsync(endpoint, new { revision = scene.RootElement.GetProperty("revision").GetString(),
+                    preset = new { layers = new[] { new { id = "smoke-layer", assetId = sceneAsset.GetProperty("id").GetString(), fit = "cover", x = -10, y = 5, scale = 1.2, opacity = .65 } } } });
+                saved.EnsureSuccessStatusCode();
+                foreach (var window in windows)
+                    await WaitAsync(async () => await window.ExecuteAsync("Boolean(document.querySelector('[data-scene-layer=smoke-layer]')) && document.querySelector('[data-scene-layer=smoke-layer]').style.opacity === '0.65' && [...document.querySelectorAll('[data-scene-layer=smoke-layer] img')].every(i => i.complete && i.naturalWidth > 0)") == "true");
+                Check(windows.Select(w => w.NavigationCount).SequenceEqual(beforeScene), "scene-sync-without-navigation-" + media);
+                Check(await first.ExecuteAsync($"document.querySelector('main')?.dataset.loadedModel === {expectedId}") == "true", "scene-preserves-model-" + media);
+            }
             await interaction(true);
             await Task.Delay(300);
             await first.CaptureAsync(Path.Combine(Path.GetDirectoryName(report)!, media + ".png"));

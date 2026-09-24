@@ -3,6 +3,8 @@ dist/
 build/
 config/runtime.local.json
 config/metadata.local.json
+config/scenes.local.json
+config/scenes.local.json.tmp
 .DS_Store
 *.log
 /arts/

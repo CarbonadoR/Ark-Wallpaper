@@ -1,12 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
-import { config } from "./config.mjs";
+import { config, rootDir } from "./config.mjs";
 import { clockAssets } from "./clock-assets.mjs";
 import { publicBackgrounds, scanBackgrounds } from "./backgrounds.mjs";
 import { pageAlphaMode, publicCatalog, scanResources, virtualAtlas } from "./catalog.mjs";
 import { renderTexturePng } from "./png-alpha.mjs";
 import { mergeStaticArt, scanStaticArt } from "./static-art.mjs";
+import { SceneStore } from "./scenes.mjs";
+import { sceneRoutes } from "./scene-routes.mjs";
 
 const app = express();
 app.disable("x-powered-by");
@@ -18,6 +20,8 @@ let index = buildIndex();
 let backgrounds = scanBackgrounds(config.backgroundRoot);
 const clockAssetPaths = clockAssets(config.uiRoot);
 const findModel = (id) => index.models.find((model) => model.id === id);
+app.use("/api", sceneRoutes({ findModel, backgrounds: () => backgrounds,
+  store: new SceneStore(process.env.ARKNIGHTS_SCENE_SETTINGS || path.join(rootDir, "config", "scenes.local.json")) }));
 
 app.get("/api/status", (_request, response) => response.json({ ready: true, ...publicCatalog(index).stats, backgrounds: backgrounds.length }));
 app.get("/api/catalog", (request, response) => {

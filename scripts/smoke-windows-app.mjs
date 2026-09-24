@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const output = path.join(root, "build", "windows", `win-${process.arch}`);
+const appDirectory = process.argv.find(value => value.startsWith("--app-dir="))?.slice("--app-dir=".length);
+const output = appDirectory ? path.resolve(root, appDirectory) : path.join(root, "build", "windows", `win-${process.arch}`);
 const config = JSON.parse(await fs.readFile(path.join(output, "launch.local.json"), "utf8"));
 // Use a separate port and user-data directory; never overwrite the user's saved settings.
 const port = await new Promise((resolve, reject) => {
@@ -19,7 +20,10 @@ const report = path.join(run, "report.json");
 await fs.writeFile(configPath, JSON.stringify(config));
 await fs.mkdir(path.join(run, "smoke-user-data"));
 await fs.writeFile(path.join(run, "smoke-user-data", "settings.json"), JSON.stringify({ diagnosticsEnabled: true }));
-const child = spawn(path.join(output, "ArkWallpaper.exe"), ["--config", configPath, "--smoke-report", report], { cwd: root, stdio: "inherit", windowsHide: true });
+const child = spawn(path.join(output, "ArkWallpaper.exe"), ["--config", configPath, "--smoke-report", report], {
+  cwd: root, stdio: "inherit", windowsHide: true,
+  env: { ...process.env, ARKNIGHTS_SCENE_SETTINGS: path.join(run, "scenes.local.json") },
+});
 const deadline = setTimeout(() => {
   // Terminate only this harness process tree if a native API stops completing.
   spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
