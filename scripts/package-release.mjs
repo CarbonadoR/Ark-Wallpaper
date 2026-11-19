@@ -24,6 +24,7 @@ for(const target of targets){
  fs.rmSync(stage,{recursive:true,force:true});fs.mkdirSync(stage,{recursive:true});
  if(target.startsWith('ios-')){
   run(process.execPath,['scripts/generate-ios-project.mjs']);
+  fs.writeFileSync('build/ios/ResourceServer.json',JSON.stringify({url:source})+'\n');
   const derived=path.join(output,'ios-derived');
   run('xcodebuild',['build','-project','ios/ArkArtwork.xcodeproj','-scheme','ArkArtwork','-configuration','Release','-destination','generic/platform=iOS Simulator','-derivedDataPath',derived,'ARCHS=arm64','ONLY_ACTIVE_ARCH=YES','SWIFT_OPTIMIZATION_LEVEL=-O','ENABLE_TESTABILITY=NO','DEBUG_INFORMATION_FORMAT=dwarf','MTL_ENABLE_DEBUG_INFO=NO',`OTHER_SWIFT_FLAGS=-file-prefix-map ${root}=.`,`OTHER_CPLUSPLUSFLAGS=$(inherited) -ffile-prefix-map=${root}=.`]);
   fs.cpSync(path.join(derived,'Build/Products/Release-iphonesimulator/ArkArtwork.app'),path.join(stage,'ArkArtwork.app'),{recursive:true});
