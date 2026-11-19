@@ -43,7 +43,7 @@ To set the wallpaper, use iOS Settings > Wallpaper > Add New Wallpaper > Photos 
 
 `ios/Resources/pack.schema.json` describes version 1. Each selected model names its image or Spine atlas, skeleton and all texture pages; each page records straight/PMA alpha. Backgrounds contain one or two images. Every dependency is listed with size and SHA-256. Unsafe relative paths and malformed manifests are rejected. File content is validated when a model/background is loaded, so one missing file does not hide all other models.
 
-`HTTPResourceProvider` implements per-character downloads, full downloads, cached updates, cancellation and offline reuse. Open the download icon to configure the HTTPS service and manage resources. Release builds include a generated default endpoint; source keeps only a generic configuration example. See `docs/resource-updates.md` for the shared protocol. Payload paths, sizes and SHA-256 hashes are validated before installation.
+`HTTPResourceProvider` implements per-character downloads, full downloads, cached updates, cancellation and offline reuse. Open the download icon to configure the HTTPS service and manage resources. Release builds include a generated placeholder endpoint; source keeps only a generic configuration example. See `docs/resource-updates.md` for the shared protocol. Payload paths, sizes and SHA-256 hashes are validated before installation.
 
 ## Distribution
 

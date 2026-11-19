@@ -2,7 +2,7 @@ Ark Wallpaper v0.2.0 - Windows
 
 1. 将整个压缩包解压到可写目录。不要在压缩包预览中直接运行。
 2. 安装 Node.js 22.12+ 或 24 LTS（含 npm）和 Microsoft Edge WebView2 Runtime。
-3. 发布包已配置公开资源下载服务，无需先准备游戏资源。
+3. 发布包的下载地址为占位，需要在“资源下载与更新…”中填写自己的 HTTPS 资源服务。
    托盘菜单“资源下载与更新…”可全量下载或更新缓存，查看器浏览人物时自动缓存。
    也可在 config/runtime.local.json 中填写已有资源位置。
 4. 双击 Start-Wallpaper.cmd。首次启动需要联网安装依赖并应用 Spine 补丁。

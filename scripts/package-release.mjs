@@ -12,7 +12,7 @@ const run=(command,args,options={})=>execFileSync(command,args,{stdio:'inherit',
 const read=(command,args)=>execFileSync(command,args,{encoding:'utf8'}).trim();
 if(read('git',['diff','--name-only'])||read('git',['diff','--cached','--name-only']))throw Error('Commit source changes before packaging.');
 const version=JSON.parse(fs.readFileSync('package.json')).version,commit=read('git',['rev-parse','HEAD']);
-const source=sourceURL(process.env.ARKNIGHTS_RELEASE_RESOURCE_SERVER||JSON.parse(fs.readFileSync('config/resources.local.json')).url).href;
+const source=sourceURL(JSON.parse(fs.readFileSync('config/resources.example.json')).url).href;
 const targets=(process.argv.find(a=>a.startsWith('--targets='))?.slice(10)||'windows-x64,windows-arm64,macos-universal,ios-simulator-arm64').split(',');
 if(targets.some(t=>!['windows-x64','windows-arm64','macos-universal','ios-simulator-arm64'].includes(t)))throw Error('Unknown release target.');
 const output=path.join(root,'build/releases',`v${version}`,commit.slice(0,8));fs.mkdirSync(output,{recursive:true});
