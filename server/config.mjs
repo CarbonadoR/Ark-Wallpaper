@@ -28,4 +28,10 @@ export const config = {
 };
 
 if (!Number.isSafeInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error("端口配置无效");
-if (!fs.existsSync(config.resourceRoot)) throw new Error("动态立绘资源目录不存在，请配置 resourceRoot");
+if (!fs.existsSync(config.resourceRoot)) {
+  let remote = process.env.ARKNIGHTS_RESOURCE_SERVER;
+  try { remote ||= JSON.parse(fs.readFileSync(path.join(rootDir, 'config/resources.local.json'), 'utf8')).url; } catch {}
+  if (!remote) throw new Error("动态立绘资源目录不存在，请配置 resourceRoot 或资源下载服务");
+  config.resourceRoot = path.join(rootDir, 'build/empty-resources');
+  fs.mkdirSync(config.resourceRoot, { recursive: true });
+}

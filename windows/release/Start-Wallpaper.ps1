@@ -14,12 +14,8 @@ try {
     $npmCli = $npmCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if (-not $npmCli) { throw 'Cannot locate npm-cli.js. Install Node.js with npm included.' }
 
-    $localConfig = Join-Path $PSScriptRoot 'config\runtime.local.json'
-    if (-not (Test-Path -LiteralPath $localConfig)) {
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'config\runtime.example.json') -Destination $localConfig
-    }
-    $runtimeText = & $node --input-type=module -e "import {config} from './server/config.mjs'; console.log(JSON.stringify({host:config.host,port:config.port}));"
-    if ($LASTEXITCODE -ne 0) { throw 'Resource configuration is invalid. Add arts/charpack/skinpack/chartable or edit config/runtime.local.json. See README-WINDOWS.txt.' }
+    $runtimeText = & $node scripts/prepare-release-launch.mjs
+    if ($LASTEXITCODE -ne 0) { throw 'Resource configuration is invalid. Check config/resources.local.json and config/runtime.local.json. See README-WINDOWS.txt.' }
     $runtime = $runtimeText | ConvertFrom-Json
     if ($runtime.host -notin @('127.0.0.1','localhost','::1')) { throw 'The resource service must use a loopback host.' }
     $hostPart = if ($runtime.host -eq '::1') { '[::1]' } else { $runtime.host }

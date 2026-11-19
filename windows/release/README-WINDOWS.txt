@@ -1,10 +1,10 @@
-Ark Wallpaper v0.1.0 - Windows
+Ark Wallpaper v0.2.0 - Windows
 
 1. 将整个压缩包解压到可写目录。不要在压缩包预览中直接运行。
 2. 安装 Node.js 22.12+ 或 24 LTS（含 npm）和 Microsoft Edge WebView2 Runtime。
-3. 将自己的 arts、charpack、skinpack、chartable 资源目录放在解压目录中。
-   资源提取工具：https://github.com/CarbonadoR/Ark-Wallpaper-Resources
-   也可复制 config/runtime.example.json 为 config/runtime.local.json，填写已有资源位置。
+3. 发布包已配置公开资源下载服务，无需先准备游戏资源。
+   托盘菜单“资源下载与更新…”可全量下载或更新缓存，查看器浏览人物时自动缓存。
+   也可在 config/runtime.local.json 中填写已有资源位置。
 4. 双击 Start-Wallpaper.cmd。首次启动需要联网安装依赖并应用 Spine 补丁。
 启动成功后通过系统托盘图标管理壁纸；不要直接运行 app/ArkWallpaper.exe。
 5. 移动解压目录或更新 Node.js 后，重新使用 Start-Wallpaper.cmd 即可生成新启动配置。
@@ -21,5 +21,5 @@ x64 包用于常见 Intel/AMD 64 位 Windows；ARM64 包用于 Windows on ARM。
 更多说明见 README.md、docs/scenes.md 和 windows/DEVELOPMENT.md。
 
 包内不包含游戏资源。程序设置保存在本机应用数据目录，场景设置保存在 config/scenes.local.json。
-退出旧版本后再运行新版本。升级时自行保留本地资源、runtime.local.json、metadata.local.json、scenes.local.json。
+退出旧版本后再运行新版本。升级时自行保留本地资源、runtime.local.json、metadata.local.json、scenes.local.json、resources.local.json 和 .resource-cache 缓存目录。
 代码许可见 LICENSE；第三方依赖许可归各自项目所有；游戏资源不属于本项目许可证范围。

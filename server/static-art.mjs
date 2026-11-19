@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { resourceID, legacyResourceIDs } from './resource-id.mjs';
 
 // Amiya's class-change resources use IDs that are absent from the exported
 // character table, but they still belong to the canonical Amiya operator.
@@ -25,7 +26,7 @@ function pngSize(filePath) {
 }
 
 function stableId(source, relativePath) {
-  return crypto.createHash("sha1").update(`static:${source}:${relativePath}`).digest("hex").slice(0, 16);
+  return resourceID(relativePath, source);
 }
 
 function assetVersion(...filePaths) {
@@ -40,6 +41,7 @@ function imageModel({ source, root, groupId, characterId, kind, label, imagePath
   const relativeImage = path.relative(root, imagePath);
   return {
     id: stableId(source, relativeImage),
+    legacyIds: legacyResourceIDs(relativeImage,source),
     groupId,
     characterId,
     kind,

@@ -1,6 +1,6 @@
 {
   "name": "arknights-dynchars-viewer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local Arknights artwork viewer and desktop dynamic wallpaper app",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -21,7 +21,10 @@
     "windows:run": "npm run windows:build && node scripts/run-windows-app.mjs",
     "windows:test": "dotnet run --project windows/ArkWallpaper.Tests -c Release",
     "windows:smoke": "node scripts/smoke-windows-app.mjs",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "ios:prepare": "node scripts/prepare-ios.mjs",
+    "ios:build": "node scripts/build-ios-app.mjs",
+    "release:package": "node scripts/package-release.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

@@ -42,7 +42,7 @@ export function sceneRoutes({ findModel, backgrounds, store }) {
     if (!asset) return response.status(404).json({ error: "场景图片不存在" });
     response.set("Cache-Control", "public, max-age=31536000, immutable");
     if (asset.alphaPath) return response.type("image/png").send(renderTexturePng(asset.file, { alphaPath: asset.alphaPath }));
-    response.sendFile(asset.file);
+    response.sendFile(asset.file, {dotfiles:'allow'});
   });
   router.use((error, _request, response, _next) => response.status(error.status === 413 ? 413 : 400).json({ error: "场景请求无法读取。" }));
   return router;

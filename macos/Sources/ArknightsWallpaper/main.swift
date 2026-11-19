@@ -65,10 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     private let clockPerspectiveKeys = ["none", "left", "right"]
     private let clockPerspectiveLabels = ["关闭透视", "左倾透视", "右倾透视"]
 
-    private var projectRoot: String { Bundle.main.object(forInfoDictionaryKey: "AKProjectRoot") as? String ?? "" }
-    private var npmPath: String { Bundle.main.object(forInfoDictionaryKey: "AKNpmPath") as? String ?? "/opt/homebrew/bin/npm" }
+    private var projectRoot: String { ProcessInfo.processInfo.environment["ARKNIGHTS_WALLPAPER_PROJECT_ROOT"] ?? Bundle.main.object(forInfoDictionaryKey: "AKProjectRoot") as? String ?? "" }
+    private var npmPath: String { ProcessInfo.processInfo.environment["ARKNIGHTS_WALLPAPER_NPM"] ?? Bundle.main.object(forInfoDictionaryKey: "AKNpmPath") as? String ?? "/opt/homebrew/bin/npm" }
     private var serverURL: URL {
-        let value = Bundle.main.object(forInfoDictionaryKey: "AKServerURL") as? String ?? "http://127.0.0.1:8791"
+        let value = ProcessInfo.processInfo.environment["ARKNIGHTS_WALLPAPER_SERVER_URL"] ?? Bundle.main.object(forInfoDictionaryKey: "AKServerURL") as? String ?? "http://127.0.0.1:8791"
         return URL(string: value)!
     }
     private var modelID: String { UserDefaults.standard.string(forKey: "modelID") ?? "" }
@@ -212,6 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.addItem(pauseItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "打开完整查看器", action: #selector(openViewer), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem(title: "资源下载与更新…", action: #selector(openResources), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "在访达中显示工程", action: #selector(showProject), keyEquivalent: "f"))
         diagnosticItem = NSMenuItem(title: diagnosticsEnabled ? "关闭诊断模式" : "启用诊断模式", action: #selector(toggleDiagnostics), keyEquivalent: "d")
         diagnosticItem.state = diagnosticsEnabled ? .on : .off
@@ -659,6 +660,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
     @objc private func openViewer() { NSWorkspace.shared.open(serverURL) }
+    @objc private func openResources() { var url = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!; url.queryItems = [URLQueryItem(name: "resources", value: "1")]; if let target = url.url { NSWorkspace.shared.open(target) } }
     @objc private func showProject() { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: projectRoot, isDirectory: true)]) }
     @objc private func showStartupError() { statusLabel.title = "无法启动本地服务"; NSApp.activate(ignoringOtherApps: true); let alert = NSAlert(); alert.messageText = "无法启动 Arknights 本地查看器"; alert.informativeText = "请确认工程目录和 runtime.local.json 中的资源路径有效。"; alert.alertStyle = .critical; alert.runModal() }
     @objc private func quit() { NSApp.terminate(nil) }

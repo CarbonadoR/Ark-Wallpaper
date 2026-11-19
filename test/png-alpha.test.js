@@ -52,6 +52,15 @@ function decodedRow(buffer) {
   return [...zlib.inflateSync(Buffer.concat(chunks)).subarray(1)];
 }
 
+test('static artwork scales a smaller alpha mask with bilinear sampling without changing RGB', t => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'ak-static-mask-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const color=path.join(root,'color.png'),alpha=path.join(root,'alpha.png');
+  fs.writeFileSync(color,rgbaRowPng(Array.from({length:4},()=>[200,100,50,255])));
+  fs.writeFileSync(alpha,rgbaRowPng([[0,0,0,255],[255,255,255,255]]));
+  assert.deepEqual(decodedRow(renderTexturePng(color,{alphaPath:alpha,resizeStaticAlpha:true})),[200,100,50,0,200,100,50,64,200,100,50,191,200,100,50,255]);
+  assert.throws(()=>renderTexturePng(color,{alphaPath:alpha}),/尺寸/);
+});
+
 test("detects premultiplied and straight-alpha PNG pixels", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ak-alpha-"));
   const premultiplied = path.join(root, "premultiplied.png");

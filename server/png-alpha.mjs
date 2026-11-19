@@ -239,8 +239,8 @@ export function inspectPngAlpha(filePath) {
   };
 }
 
-export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "straight", atlasPath = null, pageName = null } = {}) {
-  const key = [fileFingerprint(colorPath), alphaPath ? fileFingerprint(alphaPath) : "", atlasPath ? fileFingerprint(atlasPath) : "", pageName || "", alphaMode].join("|");
+export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "straight", atlasPath = null, pageName = null, resizeStaticAlpha = false } = {}) {
+  const key = [fileFingerprint(colorPath), alphaPath ? fileFingerprint(alphaPath) : "", atlasPath ? fileFingerprint(atlasPath) : "", pageName || "", alphaMode, resizeStaticAlpha].join("|");
   if (renderedTextureCache.has(key)) return renderedTextureCache.get(key);
   const color = decodeRgbaPng(colorPath);
   if (!color) return null;
@@ -249,8 +249,22 @@ export function renderTexturePng(colorPath, { alphaPath = null, alphaMode = "str
 
   if (alphaPath) {
     const mask = decodeRgbaPng(alphaPath);
-    if (!mask || mask.width !== color.width || mask.height !== color.height) throw new Error("动态纹理与 Alpha 遮罩尺寸不一致");
-    for (let index = 0; index < color.pixels.length; index += 4) color.pixels[index + 3] = mask.pixels[index];
+    if (!mask || (!resizeStaticAlpha && (mask.width !== color.width || mask.height !== color.height))) throw new Error("动态纹理与 Alpha 遮罩尺寸不一致");
+    if (mask.width === color.width && mask.height === color.height) {
+      for (let index = 0; index < color.pixels.length; index += 4) color.pixels[index + 3] = mask.pixels[index];
+    } else {
+      // Static exports sometimes use a half-resolution mask. Match the viewer's
+      // smoothed Canvas drawImage while keeping dynamic atlas validation strict.
+      for (let y=0;y<color.height;y++) {
+        const sy=Math.max(0,Math.min(mask.height-1,(y+.5)*mask.height/color.height-.5)),y0=Math.floor(sy),y1=Math.min(mask.height-1,y0+1),fy=sy-y0;
+        for (let x=0;x<color.width;x++) {
+          const sx=Math.max(0,Math.min(mask.width-1,(x+.5)*mask.width/color.width-.5)),x0=Math.floor(sx),x1=Math.min(mask.width-1,x0+1),fx=sx-x0;
+          const top=mask.pixels[(y0*mask.width+x0)*4]*(1-fx)+mask.pixels[(y0*mask.width+x1)*4]*fx;
+          const bottom=mask.pixels[(y1*mask.width+x0)*4]*(1-fx)+mask.pixels[(y1*mask.width+x1)*4]*fx;
+          color.pixels[(y*color.width+x)*4+3]=Math.round(top*(1-fy)+bottom*fy);
+        }
+      }
+    }
   } else {
     for (let index = 0; index < color.pixels.length; index += 4) {
       const sourceAlpha = color.pixels[index + 3];

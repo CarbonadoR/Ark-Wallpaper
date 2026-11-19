@@ -29,12 +29,12 @@ export function publicBackgrounds(backgrounds) {
     {
       id: `${id}:hd`,
       name: `${name} · 高清`,
-      imageUrls: [`/api/backgrounds/${encodeURIComponent(id)}/left`, `/api/backgrounds/${encodeURIComponent(id)}/right`],
+      imageUrls: [`/api/backgrounds/${encodeURIComponent(id)}/left?delivery=1`, `/api/backgrounds/${encodeURIComponent(id)}/right?delivery=1`],
     },
     {
       id: `${id}:blur`,
       name: `${name} · 模糊`,
-      imageUrls: [`/api/backgrounds/${encodeURIComponent(id)}/image`],
+      imageUrls: [`/api/backgrounds/${encodeURIComponent(id)}/image?delivery=1`],
     },
   ]);
 }

@@ -20,12 +20,12 @@ test("scans only safe home background directories with matching main images", ()
     {
       id: "bg_laterano_1:hd",
       name: "laterano 1 · 高清",
-      imageUrls: ["/api/backgrounds/bg_laterano_1/left", "/api/backgrounds/bg_laterano_1/right"],
+      imageUrls: ["/api/backgrounds/bg_laterano_1/left?delivery=1", "/api/backgrounds/bg_laterano_1/right?delivery=1"],
     },
     {
       id: "bg_laterano_1:blur",
       name: "laterano 1 · 模糊",
-      imageUrls: ["/api/backgrounds/bg_laterano_1/image"],
+      imageUrls: ["/api/backgrounds/bg_laterano_1/image?delivery=1"],
     },
   ]);
   fs.rmSync(root, { recursive: true, force: true });

@@ -45,6 +45,7 @@ internal sealed class TrayApplication : ApplicationContext
         menu.Items.Add("重新加载壁纸", null, (_, _) => { log.Event("wallpaper.reload"); foreach (var window in windows.Values) window.Reload(); });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("打开查看器", null, (_, _) => Open(config.Origin.AbsoluteUri));
+        menu.Items.Add("资源下载与更新…", null, (_, _) => Open(new UriBuilder(config.Origin) { Query = "resources=1" }.Uri.AbsoluteUri));
         menu.Items.Add("编辑当前模型场景…", null, (_, _) => Open(new UriBuilder(config.Origin) { Query = "sceneEditor=1&model=" + Uri.EscapeDataString(settings.ModelID) }.Uri.AbsoluteUri));
         menu.Items.Add("显示工程", null, (_, _) => Open(config.ProjectRoot));
         menu.Items.Add(startupItem);

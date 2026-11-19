@@ -8,6 +8,7 @@ import { normalizeWallpaperBackground, wallpaperBackgroundFromSearch } from "./w
 import { clockPointerTilt, moveWallpaperClock, normalizeWallpaperClock, wallpaperClockFromSearch } from "./wallpaper-clock.js";
 import "./styles.css";
 import { SceneWorkspace } from "./scene-workspace.jsx";
+import { ResourceManager } from "./resource-manager.jsx";
 
 spineSettings.yDown = false;
 const params = new URLSearchParams(location.search);
@@ -256,11 +257,12 @@ function Stage({ model, resetSignal, onReady, onError }) {
 }
 
 function WallpaperBackground({ settings }) {
+  const resourceURL = value => { const url=new URL(value,location.href);if(url.origin===location.origin&&url.pathname.startsWith('/api/backgrounds/'))url.searchParams.set('delivery','1');return url.href; };
   return (
     <div className="wallpaper-background" style={{ backgroundColor: settings.color }} aria-hidden="true">
-      {settings.imageUrls.length === 1 && <img className="wallpaper-background-image" src={settings.imageUrls[0]} alt="" />}
+      {settings.imageUrls.length === 1 && <img className="wallpaper-background-image" src={resourceURL(settings.imageUrls[0])} alt="" />}
       {settings.imageUrls.length === 2 && <div className="wallpaper-background-panorama">
-        {settings.imageUrls.map((url) => <img key={url} src={url} alt="" />)}
+        {settings.imageUrls.map((url) => <img key={url} src={resourceURL(url)} alt="" />)}
       </div>}
       <div className="wallpaper-background-spine" data-model-id={settings.spineId || undefined}></div>
     </div>
@@ -268,10 +270,10 @@ function WallpaperBackground({ settings }) {
 }
 
 const CLOCK_THEME_MARKS = {
-  rhodes: "/api/clock/assets/rhodes-time",
-  lonetrail: "/api/clock/assets/lonetrail-mark",
-  rainbowsix: "/api/clock/assets/rainbowsix-title",
-  volcano: "/api/clock/assets/volcano-title",
+  rhodes: "/api/clock/assets/rhodes-time?delivery=1",
+  lonetrail: "/api/clock/assets/lonetrail-mark?delivery=1",
+  rainbowsix: "/api/clock/assets/rainbowsix-title?delivery=1",
+  volcano: "/api/clock/assets/volcano-title?delivery=1",
 };
 
 function DesktopClock({ settings, onChange }) {
@@ -440,7 +442,7 @@ function App() {
     fetch("/api/catalog").then((response) => response.ok ? response.json() : Promise.reject(new Error(`目录请求失败 (${response.status})`))).then((data) => {
       setCatalog(data);
       const allModels = data.groups.flatMap((group) => group.models.map((model) => ({ group, model })));
-      const requested = allModels.find((item) => item.model.id === requestedModel);
+      const requested = allModels.find((item) => item.model.id === requestedModel || item.model.legacyIds?.includes(requestedModel));
       const fallback = allModels.find((item) => item.model.kind === "DynIllust") || allModels[0];
       const group = requested?.group || fallback?.group || null;
       setSelectedGroup(group);
@@ -504,6 +506,7 @@ function App() {
     <main className={wallpaperMode ? "app wallpaper" : `app${sceneOpen ? " scene-editing" : ""}`} data-loaded-model={runtime?.model?.id || undefined}>
       {!wallpaperMode && <aside className={`library ${libraryOpen ? "open" : ""}`}>
         <header className="brand-block">
+          <a href="?resources=1" style={{color:'inherit',fontSize:12}}>资源下载与更新</a>
           <div className="brand-word">ARKNIGHTS</div>
           <div className="brand-caption"><strong>RHODES ISLAND</strong><small>ARTWORK ASSET TERMINAL</small></div>
           <button className="panel-close" onClick={() => setLibraryOpen(false)} aria-label="关闭资源目录">×</button>
@@ -555,4 +558,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(params.get('resources') === '1' ? <ResourceManager /> : <App />);

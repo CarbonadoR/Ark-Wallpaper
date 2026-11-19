@@ -16,3 +16,9 @@ windows/**/bin/
 windows/**/obj/
 windows/**/TestResults/
 *.user
+
+config/ios-samples.local.json
+.superpowers/
+ios/**/xcuserdata/
+config/resources.local.json
+.resource-cache/

@@ -3,11 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { detectPngAlphaMode } from "./png-alpha.mjs";
 import { attachSceneResources } from "./scenes.mjs";
+import { resourceID, legacyResourceIDs } from './resource-id.mjs';
 
 const TEXTURE_PATTERN = /\.(?:png|webp|jpe?g)$/i;
 // Bump whenever server-side texture composition or alpha normalization changes
 // so immutable browser and wallpaper caches cannot reuse an older rendering.
-const TEXTURE_PIPELINE_VERSION = "alpha-v9";
+const TEXTURE_PIPELINE_VERSION = "alpha-v10";
 
 function pngDimensions(filePath) {
   if (!filePath || path.extname(filePath).toLowerCase() !== ".png") return null;
@@ -128,13 +129,14 @@ export function scanResources(resourceRoot, metadataFile) {
         issues.push({ atlas: relativeAtlas, texture: mapping.sourceName, problem: "alpha-size-mismatch" });
       }
     }
-    const id = crypto.createHash("sha1").update(relativeAtlas).digest("hex").slice(0, 16);
+    const id = resourceID(relativeAtlas);
     models.push({
       id,
       groupId,
       kind,
       label: `${kind} · ${path.basename(atlasPath, ".atlas")}`,
       relativeAtlas,
+      legacyIds: legacyResourceIDs(relativeAtlas),
       atlasPath,
       skeletonPath,
       skeletonFormat: skeletonPath.endsWith(".skel") ? "binary" : "json",
@@ -177,6 +179,7 @@ export function publicCatalog(index) {
       outfits: group.outfits || [],
       models: group.models.map((model) => ({
         id: model.id,
+        legacyIds: model.legacyIds || [],
         kind: model.kind,
         label: model.label,
         outfit: model.outfit,
